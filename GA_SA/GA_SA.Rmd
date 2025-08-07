@@ -1,0 +1,109 @@
+---
+title: "Relative growth rate and Susceptibility assay"
+author: "Sara Nouere"
+output: html_document
+---
+## Introduction
+This document analyzes the **relative growth rate**, and **number of consumed fronds** of duckweed populations (previously exposed to herbivory and control) to snail herbivory. The figures display violin plots of growth rates or consumed fronds, grouped by year and treatment.
+
+**Note:** This R Markdown document is used to generate **Figure 1C** in the manuscript, and **Figure S2C** in the supplementary
+
+### Figure 1C
+## Load required libraries
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(plotrix)
+library(car)
+library(lme4)
+```
+
+## Load and prepare data
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+df <- read.table("GA.txt", sep = "\t", header = TRUE)
+df$year <- as.factor(df$year)
+df$rel.count <- (log(df$count_w14) - log(df3$count_w12))/14
+```
+
+## Figure 1C: relative growth rate by year and treatment
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+px1C <- ggplot(df3, aes(x = year, y = rel.count, fill = treatment)) +
+  theme_bw(base_size = 14) +
+  geom_violin(trim=FALSE) +
+  stat_summary(fun = mean, geom = "pointrange", fun.max = function(x) mean(x) +  std.error(x), fun.min = function(x) mean(x) -  std.error(x), position=position_dodge(0.9), color="black") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x = element_text(color="black"),
+        axis.text.y = element_text(color="black"),
+        axis.title.y = element_text(color="black"),
+        panel.grid = element_blank(),
+        legend.position = "none") +
+  scale_fill_manual(name = "Legend", values=c("#0072B2", "#D55E00"), labels = c("Control", "Herbivory"), breaks = c("Control", "Herbivory")) +
+  labs(x = "Year" ,
+       y = "Relative growth rate")
+px1C
+```
+
+## Statistical analysis: year 2023
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+df1 <- df %>%
+  filter(year %in% c(2023))
+
+model <- lmer(rel.count ~ treatment + (1|pond), data = df1)
+Anova(model, test = "F")
+```
+
+## Statistical analysis: year 2024
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+df2 <- df %>%
+  filter(year %in% c(2024))
+
+model <- lmer(rel.count ~ treatment + (1|pond), data = df2)
+Anova(model, test = "F")
+```
+
+### Figure S2C
+## Import and prepare data
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+df <- read.table("SA.txt", sep = "\t", header = TRUE)
+df$year <- as.factor(df$year)
+```
+
+## Plot S2C: adjusted consumed fronds by year and treatment
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+px5 <- ggplot(df, aes(x = year, y = adjusted_consumed, fill = treatment)) +
+  theme_bw(base_size = 14) +
+  geom_violin(trim=FALSE) +
+  stat_summary(fun = mean, geom = "pointrange", fun.max = function(x) mean(x) +  std.error(x), fun.min = function(x) mean(x) -  std.error(x), position=position_dodge(0.9), color="black") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x = element_text(color="black"),
+        axis.text.y = element_text(color="black"),
+        axis.title.y = element_text(color="black"),
+        panel.grid = element_blank(),
+        legend.position = "none") +
+  scale_fill_manual(name = "Legend", values=c("#0072B2", "#D55E00"), labels = c("Control", "Herbivory"), breaks = c("Control", "Herbivory")) +
+  labs(x = "Year" ,
+       y = "Consumed fronds")
+px5
+```
+
+## Statistical analysis: year 2023 and 2024
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+
+df1 <- df %>%
+  filter(year %in% c(2023))
+model <- lmer(adjusted_consumed~ treatment + (1|pond), data = df1)
+Anova(model, test="F")
+
+df2 <- df %>%
+  filter(year %in% c(2024))
+model <- lmer(adjusted_consumed ~ treatment + (1|pond) + (1|timepoint), data = df2)
+Anova(model, test="F")
+```
