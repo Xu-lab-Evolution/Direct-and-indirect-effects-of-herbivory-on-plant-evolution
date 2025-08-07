@@ -1,0 +1,849 @@
+---
+title: "Pool-sequencing"
+author: "Sara Nouere"
+date: "2025-08-06"
+output: html_document:
+toc: true
+    toc_depth: 3
+    code_folding: hide
+    number_sections: true
+---
+## Introduction
+
+This document describes a pool-sequencing analysis pipeline designed to explore genotype dynamics and microbial community composition in *Spirodela polyrhiza* under control and snail herbivory experimental treatments. The pipeline includes steps for preprocessing raw reads, host read removal, genotype frequency estimation using the HAF-pipeline, and taxonomic profiling with Kraken2. Statistical analysis and visualizations are performed in R.
+   
+   -Figure 2A-F snd Figure S4: Circular and time-series plots of genotype dynamics
+   -Table S3: : genotype frequency model (mixed effects)
+   -Table S4: PERMANOVA on microbial and algal community structure
+   -Table S5: Shannon diversity (mixed model)
+
+## Trimming raw reads with Trim Galore
+
+The following batch script was used to trim adapters and low-quality reads using **Trim Galore** in a high-performance computing environment.
+
+```bash
+module load bio/Trim_Galore/0.6.5-GCCcore-8.3.0-Java-11-Python-3.7.4
+module load tools/parallel
+
+PRJDIR=path_to_project
+INDIR=$PRJDIR/path_to_data
+OUTDIR=$PRJDIR/path_to_output
+
+cd $INDIR
+
+find -name "*_1.fq.gz" | grep -oP '.*(?=_)' | parallel -j 32 trim_galore --illumina --paired --fastqc --gzip -o $OUTDIR/ {}\_1.fq.gz {}\_2.fq.gz
+```
+
+## Host read removal using BWA and SAMtools
+The following shell script was used to align paired-end reads to the Spirodela polyrhiza reference genome using BWA (v0.7.17) and process the alignments with SAMtools (v1.14). Host-derived reads were separated from unmapped reads for downstream metagenomic analysis.
+
+```bash
+NTHREADS=32
+
+module load bio/BWA/0.7.17
+module load bio/SAMtools/1.14-GCC-11.2.0
+module load tools/parallel/20210722-GCCcore-11.2.0
+
+PRJDIR=path_to_project
+DATADIR=$PRJDIR/path_to_trimgalore
+REFDIR=$PRJDIR/path_to_reference_genome
+OUTDIR=$PRJDIR/path_to_output
+OUTPUT_mapped=$OUTDIR/mapped
+OUTPUT_unmapped=$OUTDIR/host_removed
+
+for file in $DATADIR/*_1_val_1.fq.gz
+do
+SAMPLE=$(basename $file "_1_val_1.fq.gz")
+echo "$SAMPLE bwa"
+bwa mem -R '@RG\tID:'"${SAMPLE}"'\tSM:'"${SAMPLE}"'\tPL:ILLUMINA\tPI:330' -M -t $NTHREADS $REFDIR/SP_combined.fasta  $DATADIR/${SAMPLE}_1_val_1.fq.gz $DATADIR/${SAMPLE}_2_val_2.fq.gz | \
+samtools view -@ $NTHREADS -hbS - > $OUTDIR/${SAMPLE}.bam
+
+echo "$SAMPLE process unmapped reads"
+samtools view -@ $NTHREADS -b -f 12 -F 256 $OUTDIR/${SAMPLE}.bam | \
+samtools sort -@ $NTHREADS -n - | \
+samtools fastq -@ $NTHREADS - -1 $OUTPUT_unmapped/${SAMPLE}_host_removed_R1.fastq.gz -2 $OUTPUT_unmapped/${SAMPLE}_host_removed_R2.fastq.gz -0 /dev/null -s /dev/null -n
+
+echo "$SAMPLE process mapped reads"
+samtools view -@ $NTHREADS -b -f 3 -q 30 $OUTDIR/${SAMPLE}.bam | \
+samtools sort -@ $NTHREADS -n - | \
+samtools fixmate -@ $NTHREADS -m -O bam - - | \
+samtools sort -@ $NTHREADS - | \
+samtools markdup -@ $NTHREADS -r - $OUTPUT_mapped/${SAMPLE}.bam
+
+echo "$SAMPLE index reads"
+samtools index -@ $NTHREADS $OUTPUT_mapped/${SAMPLE}.bam
+
+done
+```
+
+## Genotype frequency estimation using HAF-pipeline
+This section describes how genotype frequencies were estimated using the HAF-pipeline and harp, applied across 20 duckweed chromosomes.
+
+```bash
+cd $PRJDIR
+
+wget https://bitbucket.org/dkessner/harp/downloads/harp_linux_140925_103521.zip
+unzip harp_linux_140925_103521.zip
+rm harp_linux_140925_103521.zip
+
+git clone https://github.com/petrov-lab/HAFpipe-line
+
+cd $REFDIR
+tar -xvzf SP_228.basic_set.snp.recode.rm_cluster3-10.vcf.PASS.vcf.gz
+```
+
+## HAF pipeline Batch script
+
+```bash
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
+PRJDIR=/path_to_project
+DATADIR=$PRJDIR/path_to_bwa_mapped_reads
+REFDIR=$PRJDIR/path_to_duckweed_reference_genome
+OUTDIR=$PRJDIR/path_to_output
+
+export PATH=$PATH:$PRJDIR/harp_linux_140925_103521/bin
+export PATH=$PATH:$PRJDIR/HAFpipe-line
+
+module load bio/HTSlib/1.14-GCC-11.2.0
+module load bio/R-bundle-Bioconductor/3.15-foss-2021b-R-4.2.0
+
+cd $OUTDIR
+
+chrArray=("ChrS01" "ChrS02" "ChrS03" "ChrS04" "ChrS05" "ChrS06" "ChrS07" "ChrS08" "ChrS09" "ChrS10" "ChrS11" "ChrS12" "ChrS13" "ChrS14" "ChrS15" "ChrS16" "ChrS17" "ChrS18" "ChrS19" "ChrS20")
+
+function processHAF {
+  file=$(basename $1 ".bam")
+  chr=$2
+  echo "Processing sample $file chromosome $chr"
+
+  HAFpipe_wrapper.sh -t 1,2,3,4 \
+    -v $REFDIR/genotypes.vcf \
+    -c $chr \
+    -s $OUTDIR/${file}.${chr}.snpTable \
+    -i simpute \
+    -b $DATADIR/${file}.bam \
+    -e sanger \
+    -a 0.00051 \
+    -w 100 \
+    -g 30 \
+    -r $REFDIR/SP_combined.fasta \
+    -o $OUTDIR
+}
+
+export -f processHAF
+
+# Run in parallel across chromosomes and BAMs
+parallel -j 16 processHAF ::: $DATADIR/*.bam ::: "${chrArray[@]}"
+
+# Clean up intermediate files
+find . -type f ! -name "*.freqs" -exec rm -rf {} \;
+
+# Concatenate chromosome-specific outputs
+for file in $DATADIR/*.bam
+do
+  SAMPLE=$(basename $file ".bam")
+  cat ${SAMPLE}.bam.* > ${SAMPLE}.txt
+done
+```
+## Kraken2: Bacteria
+We used Kraken2 to characterize the plant-associated microbial community using the pool-seq data that did not match the S. polyrhiza reference genome. The output are available inside the folder kraken_bacteria and kraken_algae for replicating analyses.
+
+```bash
+PRJDIR=path_to_project
+DATADIR=path_to_BWA_output
+DBDIR=$PRJDIR/krakenDB
+OUTDIR_kraken=$PRJDIR/kraken
+OUTDIR_bracken=$PRJDIR/bracken
+NTHREADS=32
+
+cd $DBDIR
+
+wget https://genome-idx.s3.amazonaws.com/kraken/k2_pluspf_20210517.tar.gz
+tar -xvzf k2_pluspf_20210517.tar.gz
+
+cd $DATADIR
+
+for file in *_host_removed_R1.fastq.gz
+do
+SAMPLE=$(basename $file "_host_removed_R1.fastq.gz")
+cd $OUTDIR
+kraken2 --use-names --threads $NTHREADS \
+--db $DBDIR \
+--gzip-compressed \
+--paired $DATADIR/${SAMPLE}_host_removed_R1.fastq.gz \
+$DATADIR/${SAMPLE}_host_removed_R2.fastq.gz \
+--output ${SAMPLE}.txt --report ${SAMPLE}.report.txt
+done 
+
+cd $OUTDIR_kraken
+
+for file in *.report.txt
+do
+SAMPLE=$(basename $file ".report.txt")
+bracken -d $DBDIR -i ${SAMPLE}.report.txt -o $OUTDIR_bracken/${SAMPLE}.txt -l S
+done 
+```
+## Bracken
+**Note:** Bracken refines Kraken2 taxonomic assignments by reducing false positives through Bayesian re-estimation of species abundance, providing more accurate diversity metrics.
+
+```bash
+PRJDIR=path_to_project
+DATADIR=$PRJDIR/path_to_kraken2
+DBDIR=$PRJDIR/krakenDB
+OUTDIR=$PRJDIR/path_to_bracken
+
+module load lang/Python/3.12.3-GCCcore-13.3.0
+
+export PATH=$PATH:$OUTDIR/Bracken-2.7
+export PATH=$PATH:$OUTDIR/KrakenTools-1.2
+
+cd $OUTDIR
+
+for file in $DATADIR/*.report.txt
+do
+SAMPLE=$(basename $file ".report.txt")
+bracken -d $DBDIR -i $DATADIR/${SAMPLE}.report.txt -o $OUTDIR/${SAMPLE}.txt -l S
+done
+
+for file in $DATADIR/*.report_bracken_species.txt
+do
+SAMPLE=$(basename $file ".report_bracken_species.txt")
+python $OUTDIR/KrakenTools-1.2/kreport2mpa.py -r $DATADIR/${SAMPLE}.report_bracken_species.txt -o $OUTDIR/${SAMPLE}_mpa.txt --display-header
+done
+
+python $OUTDIR/KrakenTools-1.2/combine_mpa.py -i $OUTDIR/*_mpa.txt -o $OUTDIR/combined_species_mpa.txt
+grep -E "(s__)|(#Classification)" combined_species_mpa.txt > bracken_abundance_species_mpa.txt
+sed -i -e 's/.report_bracken_species.txt//g' bracken_abundance_species_mpa.txt
+```
+## Using R, we process the bracken data and produce a phyloseq object.
+## Load required libraries
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library("purrr")
+library("ape")
+library("car")
+library("data.table")
+library("DESeq2")
+library("dplyr")
+library("emmeans")
+library("ggplot2")
+library("ggpubr")
+library("grid")
+library("lme4")
+library("phyloseq")
+library("picante")
+library("plyr")
+library("Rmisc")
+library("tidyr")
+library("tibble")
+library("vegan")
+library("Hmisc")
+library("limma")
+library("scales")
+library("RVAideMemoire")
+library("brms")
+library("rstanarm")
+library("ggridges")
+library("OTUtable")
+library("microbiome")
+```
+
+## Import Bracken output (from the data_bracken) and metadata (from the data_reference)
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+kraken.raw <- read.table("bracken_abundance_species_mpa.txt", header = T, row.names = NULL)
+mdata <- read.table("metadata.txt", header = T, row.names = 1)
+otu.t <- kraken.raw %>% select(-Classification)
+row.names(otu.t) <- paste('Taxon', 1:nrow(otu.t), sep = '_')
+taxa.t <- data.frame("taxa" = kraken.raw$Classification)
+row.names(taxa.t) <- paste('Taxon', 1:nrow(taxa.t), sep = '_')
+```
+
+## Taxonomy cleaning function
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+fix.taxonomy <- function(df){
+  t2 <- df
+  rows <- !grepl("k__", as.character(t2$Kingdom))
+  t2$Phylum[rows] <- paste0(t2$Kingdom)
+  t2$Kingdom[rows] <- NA
+  rows <- !grepl("p__", as.character(t2$Phylum))
+  t2$Class[rows] <- paste0(t2$Phylum)
+  t2$Phylum[rows] <- NA
+  rows <- !grepl("c__", as.character(t2$Class))
+  t2$Order[rows] <- paste0(t2$Class)
+  t2$Class[rows] <- NA
+  rows <- !grepl("o__", as.character(t2$Order))
+  t2$Family[rows] <- paste0(t2$Order)
+  t2$Order[rows] <- NA
+  rows <- !grepl("f__", as.character(t2$Family))
+  t2$Genus[rows] <- paste0(t2$Family)
+  t2$Family[rows] <- NA
+  rows <- !grepl("g__", as.character(t2$Genus))
+  t2$Species[rows] <- paste0(t2$Genus)
+  t2$Genus[rows] <- NA
+  return(t2)
+}
+```
+
+## Split and fix taxonomy
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+t1 <- dplyr::filter(taxa.t, grepl('k__Bacteria|__Archaea', taxa))
+t1 <- t1 %>% separate(taxa, c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), "\\|")
+t1 <- fix.taxonomy(t1)
+t2 <- dplyr::filter(taxa.t, grepl('k__Eukaryota', taxa))
+t2a <- dplyr::filter(t2, grepl('k__Fungi', taxa))
+t2a <- t2a %>% separate(taxa, c("Domain","Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), "\\|") %>% select(-Domain)
+t2a <- fix.taxonomy(t2a)
+t2b <- dplyr::filter(t2, !grepl('k__Fungi', taxa))
+t2b <- t2b %>% separate(taxa, c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), "\\|")
+t2b <- fix.taxonomy(t2b)
+t3 <- dplyr::filter(taxa.t, grepl('k__Viruses', taxa))
+t3 <- t3 %>% separate(taxa, c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), "\\|")
+t3 <- fix.taxonomy(t3)
+
+taxa <- rbind(t1, t2a, t2b, t3)
+```
+
+## Create phyloseq object
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+otutable <- otu_table(otu.t, taxa_are_rows=TRUE)
+mdata <- sample_data(mdata)
+tax_mat <- as.matrix(taxa)
+taxa <- tax_table(tax_mat)
+GM <- phyloseq(otutable, mdata, taxa)
+GM.kraken <- subset_samples(GM, category =="experimental")
+GM.kraken <- prune_taxa(taxa_sums(GM.kraken) > 1, GM.kraken)
+GM.kraken
+```
+
+## Shannon diversity estimation a linear mixed-effects model (Table S5)
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+ps.rarefied = rarefy_even_depth(GM.kraken, rngseed=1, sample.size=0.9*min(sample_sums(GM.kraken)), replace=F)
+otus <- as.data.frame(otu_table(ps.rarefied))
+diversity <- estimate_richness(ps.rarefied, split = TRUE, measures="Shannon")
+diversity <- cbind(sample_data(ps.rarefied), diversity)
+
+model <- lmer(Shannon ~ treatment + (1|pond_group), data = diversity)
+Anova(model, test ="F")
+```
+
+## Normalisation
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+library("Wrench") 
+
+#Normalisation
+wrench.norm.ps <- function(ps){
+  count_tab <- as.matrix(data.frame(otu_table(ps)))
+  group <- sample_data(ps)$treatment
+  W <- wrench(count_tab, condition=group)
+  norm_factors <- W$nf
+  head(norm_factors)
+  norm_counts <- sweep(count_tab, 2, norm_factors, FUN = '/')
+  norm_counts_trim <- data.frame(t(data.frame(norm_counts)))                                                  
+  #norm_counts_trim[] <- lapply(norm_counts_trim, function(x) DescTools::Winsorize(x, probs = c(0, 0.97), type = 1))
+  norm_counts_trim <- data.frame(t(norm_counts_trim))
+  norm_counts_trim[norm_counts_trim == 0] <- 1
+  norm_counts_trim <- log2(norm_counts_trim)
+  colnames(norm_counts_trim) <- gsub("\\.", "-", colnames(norm_counts_trim))
+  ps_norm <- ps
+  otu_table(ps_norm) <- otu_table(norm_counts_trim, taxa_are_rows =  TRUE)
+  return(ps_norm)
+}
+ps <- wrench.norm.ps(GM.kraken)
+```
+
+## PERMANOVA (Table S4)
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+sampledf <- data.frame(sample_data(ps))
+dist.mat <- phyloseq::distance(ps, method = "bray")
+perm <- how(nperm = 999)
+set.seed(100)
+pmv <- adonis2(dist.mat ~  treatment, data = sampledf, permutations = perm)
+pmv
+```
+
+## Algae
+First, we create a reference dataset. The file Acc_List.txt with the accession IDs of the selected reference genomes is available inside the data_reference folder.
+
+```bash
+PRJDIR=path_to_project
+DATADIR=path_to_BWA_output
+DBDIR=$PRJDIR/krakenDB
+OUTDIR=$PRJDIR/kraken
+OUTDIR_bracken=$PRJDIR/bracken
+NTHREADS=32
+
+mkdir ref_database_algae
+cd ref_database_algae
+mkdir fasta
+
+cat Acc_List.txt | while read line || [[ -n $line ]];
+do
+echo "Downloading entry $line"
+esearch -db nucleotide -query $line < /dev/null | efetch -format fasta > ./fasta/${line}.fasta
+done
+
+kraken2-build --download-taxonomy --db krakenDBcustom
+kraken2-build --download-library plant --db krakenDBcustom
+
+for file in ./fasta/*.fasta
+do
+kraken2-build --add-to-library $file --db krakenDBcustom
+done
+
+kraken2-build --build --db krakenDBcustom --threads 32
+
+bracken-build -d krakenDBcustom -t 32
+```
+## Taxonomic profiling of algae with Kraken2 and Bracken
+
+```bash
+PRJDIR=path_to_project_director
+DATADIR=path_to_Bowtie_output
+DBDIR=$PRJDIR/ref_database_algae
+OUTDIR_kraken=$PRJDIR/kraken
+OUTDIR_bracken=$PRJDIR/bracken
+NTHREADS=32
+
+cd $DATADIR
+
+for file in *_host_removed_R1.fastq.gz
+do
+SAMPLE=$(basename $file "_host_removed_R1.fastq.gz")
+cd $OUTDIR
+kraken2 --use-names --threads $NTHREADS \
+--db $DBDIR \
+--gzip-compressed \
+--paired $DATADIR/${SAMPLE}_host_removed_R1.fastq.gz \
+$DATADIR/${SAMPLE}_host_removed_R2.fastq.gz \
+--output ${SAMPLE}.txt --report ${SAMPLE}.report.txt
+done 
+
+cd $OUTDIR_kraken
+
+for file in *.report.txt
+do
+SAMPLE=$(basename $file ".report.txt")
+bracken -d $DBDIR -i ${SAMPLE}.report.txt -o $OUTDIR_bracken/${SAMPLE}.txt -l S
+done 
+```
+```bash
+PRJDIR=path_to_project
+DATADIR=$PRJDIR/path_to_kraken_algae
+DBDIR=$PRJDIR/path_to_ref_database_algae
+OUTDIR=$PRJDIR/path_to_output
+
+module load lang/Python/3.12.3-GCCcore-13.3.0
+
+export PATH=$PATH:$OUTDIR/Bracken-2.7
+export PATH=$PATH:$OUTDIR/KrakenTools-1.2
+
+cd $OUTDIR
+
+for file in $DATADIR/*.report.txt
+do
+SAMPLE=$(basename $file ".report.txt")
+bracken -d $DBDIR -i $DATADIR/${SAMPLE}.report.txt -o $OUTDIR/${SAMPLE}.txt -l S
+done
+
+for file in $DATADIR/*.report_bracken_species.txt
+do
+SAMPLE=$(basename $file ".report_bracken_species.txt")
+python $OUTDIR/KrakenTools-1.2/kreport2mpa.py -r $DATADIR/${SAMPLE}.report_bracken_species.txt -o $OUTDIR/${SAMPLE}_mpa.txt --display-header
+done
+
+python $OUTDIR/KrakenTools-1.2/combine_mpa.py -i $OUTDIR/*_mpa.txt -o $OUTDIR/combined_species_mpa.txt
+grep -E "(s__)|(#Classification)" combined_species_mpa.txt > bracken_abundance_species_mpa.txt
+sed -i -e 's/.report_bracken_species.txt//g' bracken_abundance_species_mpa.txt
+```
+## Using R, we process the bracken data and produce a phyloseq object.
+## Import Bracken output (from the data_bracken_algae2023 and data_bracken_algae2024) and metadata (from the data_reference)
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+kraken.raw <- read.table("bracken_abundance_species_mpa.txt", header = T, row.names = NULL)
+mdata <- read.table("metadata.txt", header = T, row.names = 1)
+otu.t <- kraken.raw %>% select(-Classification)
+row.names(otu.t) <- paste('Taxon', 1:nrow(otu.t), sep = '_')
+taxa.t <- data.frame("taxa" = kraken.raw$Classification)
+row.names(taxa.t) <- paste('Taxon', 1:nrow(taxa.t), sep = '_')
+```
+
+## Taxonomy cleaning function
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+fix.taxonomy <- function(df){
+  t2 <- df
+  rows <- !grepl("k__", as.character(t2$Kingdom))
+  t2$Phylum[rows] <- paste0(t2$Kingdom)
+  t2$Kingdom[rows] <- NA
+  rows <- !grepl("p__", as.character(t2$Phylum))
+  t2$Class[rows] <- paste0(t2$Phylum)
+  t2$Phylum[rows] <- NA
+  rows <- !grepl("c__", as.character(t2$Class))
+  t2$Order[rows] <- paste0(t2$Class)
+  t2$Class[rows] <- NA
+  rows <- !grepl("o__", as.character(t2$Order))
+  t2$Family[rows] <- paste0(t2$Order)
+  t2$Order[rows] <- NA
+  rows <- !grepl("f__", as.character(t2$Family))
+  t2$Genus[rows] <- paste0(t2$Family)
+  t2$Family[rows] <- NA
+  rows <- !grepl("g__", as.character(t2$Genus))
+  t2$Species[rows] <- paste0(t2$Genus)
+  t2$Genus[rows] <- NA
+  return(t2)
+}
+```
+
+## Split and fix taxonomy
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+t1 <- dplyr::filter(taxa.t, grepl('k__Bacteria|__Archaea', taxa))
+t1 <- t1 %>% separate(taxa, c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), "\\|")
+t1 <- fix.taxonomy(t1)
+t2 <- dplyr::filter(taxa.t, grepl('k__Eukaryota', taxa))
+t2a <- dplyr::filter(t2, grepl('k__Fungi', taxa))
+t2a <- t2a %>% separate(taxa, c("Domain","Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), "\\|") %>% select(-Domain)
+t2a <- fix.taxonomy(t2a)
+t2b <- dplyr::filter(t2, !grepl('k__Fungi', taxa))
+t2b <- t2b %>% separate(taxa, c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), "\\|")
+t2b <- fix.taxonomy(t2b)
+t3 <- dplyr::filter(taxa.t, grepl('k__Viruses', taxa))
+t3 <- t3 %>% separate(taxa, c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), "\\|")
+t3 <- fix.taxonomy(t3)
+
+taxa <- rbind(t1, t2a, t2b, t3)
+```
+
+## Create phyloseq object
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+otutable <- otu_table(otu.t, taxa_are_rows=TRUE)
+mdata <- sample_data(mdata)
+tax_mat <- as.matrix(taxa)
+taxa <- tax_table(tax_mat)
+GM <- phyloseq(otutable, mdata, taxa)
+GM.kraken <- subset_samples(GM, category =="experimental")
+GM.kraken <- prune_taxa(taxa_sums(GM.kraken) > 1, GM.kraken)
+GM.kraken
+```
+
+## Shannon diversity estimation an linear mixed-effects model (Table S5)
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+ps.rarefied = rarefy_even_depth(GM.kraken, rngseed=1, sample.size=0.9*min(sample_sums(GM.kraken)), replace=F)
+otus <- as.data.frame(otu_table(ps.rarefied))
+diversity <- estimate_richness(ps.rarefied, split = TRUE, measures="Shannon")
+diversity <- cbind(sample_data(ps.rarefied), diversity)
+
+model <- lmer(Shannon ~ treatment + (1|pond_group), data = diversity)
+Anova(model, test ="F")
+```
+
+## Normalisation
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+library("Wrench") 
+
+#Normalisation
+wrench.norm.ps <- function(ps){
+  count_tab <- as.matrix(data.frame(otu_table(ps)))
+  group <- sample_data(ps)$treatment
+  W <- wrench(count_tab, condition=group)
+  norm_factors <- W$nf
+  head(norm_factors)
+  norm_counts <- sweep(count_tab, 2, norm_factors, FUN = '/')
+  norm_counts_trim <- data.frame(t(data.frame(norm_counts)))                                                  
+  #norm_counts_trim[] <- lapply(norm_counts_trim, function(x) DescTools::Winsorize(x, probs = c(0, 0.97), type = 1))
+  norm_counts_trim <- data.frame(t(norm_counts_trim))
+  norm_counts_trim[norm_counts_trim == 0] <- 1
+  norm_counts_trim <- log2(norm_counts_trim)
+  colnames(norm_counts_trim) <- gsub("\\.", "-", colnames(norm_counts_trim))
+  ps_norm <- ps
+  otu_table(ps_norm) <- otu_table(norm_counts_trim, taxa_are_rows =  TRUE)
+  return(ps_norm)
+}
+ps <- wrench.norm.ps(GM.kraken)
+```
+
+## PERMANOVA (Table S4)
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+sampledf <- data.frame(sample_data(ps))
+dist.mat <- phyloseq::distance(ps, method = "bray")
+perm <- how(nperm = 999)
+set.seed(100)
+pmv <- adonis2(dist.mat ~  treatment, data = sampledf, permutations = perm)
+pmv
+```
+
+## Using data generated from HAFpipe (data can be found in data_HAFpipe folder and metadata in data_reference folder)
+Circular bar plots (Figures 2A and 2B), Per-genotype time series plots (Figures 2C–F + Figure S4), and Table S3
+
+## Load required libraries
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(dplyr)
+library(reshape2)
+library(ggplot2)
+library(lme4)
+library(car)
+library(emmeans)
+library(cowplot)
+library(ggpubr)
+library(plotrix)
+library(ggforce)
+library(vegan)
+library(tidyverse)
+library(tidyr)
+library(viridis)
+library(scales)
+library(ggrepel)
+```
+
+## Genotype list and filtering
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+genotype.list <- c("Sp020", "Sp021", "Sp023", "Sp027", "Sp029", "Sp031", "Sp034", "Sp042", "Sp049", "Sp056",
+                   "Sp058", "Sp062", "Sp065", "Sp066", "Sp067", "Sp070", "Sp074", "Sp102", "Sp103", "SP190",
+                   "SP193", "SP214", "SP217", "SP219")
+
+
+single.gen.fun <- function(x){
+  df.genotype <- read.table(paste0("data/", x, ".txt"))
+  colnames(df.genotype) <- c("position", "begin", "end", genotype.list)
+  df.genotype <- df.genotype %>% filter_at(x, any_vars(. > 0.50))
+  df.genotype$position <- paste(df.genotype$position, df.genotype$begin, df.genotype$end, sep = "_")
+  return(df.genotype$position)
+}
+
+sg.tab <- sapply(genotype.list, single.gen.fun, simplify = FALSE, USE.NAMES = TRUE)
+sg.count <- table(unlist(lapply(sg.tab, unique)))
+sg.count <- as.data.frame(sg.count) %>% arrange(desc(Freq)) %>% as_tibble() %>% slice(1:10)
+```
+
+## Data import and processing
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+files <- dir(path = "data", pattern = "EW*")
+
+data <- sapply(files, function(x){
+  raw.data <- read.table(paste0("data/", x))
+  colnames(raw.data) <- c("position", "begin", "end", genotype.list)
+  raw.data$position <- paste(raw.data$position, raw.data$begin, raw.data$end, sep = "_")
+  raw.data$sample <- paste0(x)
+  raw.data$sample  <- sub('\\.[^.]+$', '', raw.data$sample)
+  raw.data$begin <- NULL
+  raw.data$end <- NULL
+  return(raw.data)},
+  simplify = FALSE,USE.NAMES = TRUE)
+
+data <- Reduce(function(x,y) {rbind(x,y)}, data)
+data <- data[which(data$position %in% sg.count$Var1),] ### THIS ONE TO ALLOW FILTERING
+data$position <- NULL
+
+df <- data %>% group_by(sample) %>% summarize(Sp020 = mean(Sp020),
+                                              Sp021 = mean(Sp021),
+                                              Sp023 = mean(Sp023),
+                                              Sp027 = mean(Sp027),
+                                              Sp029 = mean(Sp029),
+                                              Sp031 = mean(Sp031),
+                                              Sp034 = mean(Sp034),
+                                              Sp042 = mean(Sp042),
+                                              Sp049 = mean(Sp049),
+                                              Sp056 = mean(Sp056),
+                                              Sp058 = mean(Sp058),
+                                              Sp062 = mean(Sp062),
+                                              Sp065 = mean(Sp065),
+                                              Sp066 = mean(Sp066),
+                                              Sp067 = mean(Sp067),
+                                              Sp070 = mean(Sp070),
+                                              Sp074 = mean(Sp074),
+                                              Sp102 = mean(Sp102),
+                                              Sp103 = mean(Sp103),
+                                              SP190 = mean(SP190),
+                                              SP193 = mean(SP193),
+                                              SP214 = mean(SP214),
+                                              SP217 = mean(SP217),
+                                              SP219 = mean(SP219))
+
+metadata <- read.csv("data/metadata.csv", header = T)
+
+df2 <- merge(metadata, df, by = "sample")
+#mdata <- melt(df2, id=c("sample", "type", "category", "ID_pond", "treatment","week")) 
+mdata <- reshape2::melt(df2, id.vars = c("sample", "type", "category", "ID_pond", "treatment", "week"))
+```
+
+## Normalization and data preparation
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+mdata4 <- mdata[which(mdata$category == "control_w0"),]
+mdata4 <- mdata4 %>% group_by(treatment, ID_pond, type, week, variable) %>% summarise(value = mean(value))
+mdata4 <- mdata4[which(mdata4$type == "control_w0_mix"),]
+mdata4 <- mdata4 %>% mutate(value = (1/24)/value)
+
+mdata0 <- mdata[which(mdata$type == "control_w0_mix"),]
+mdata0 <- merge(mdata0, mdata4, by = "variable") %>% mutate(value = value.x * value.y)
+mdata0 <- mdata0 %>% select(sample, ID_pond.x, treatment.x, week.x, variable, value)
+colnames(mdata0) <- c("sampleID", "pond", "treatment", "week", "genotype", "value")
+
+mdata2 <- mdata[which(mdata$category == "experimental"),]
+mdata2 <- merge(mdata2, mdata4, by = "variable") %>% mutate(value = value.x * value.y)
+mdata2 <- mdata2 %>% select(sample, ID_pond.x, treatment.x, week.x, variable, value)
+colnames(mdata2) <- c("sampleID", "pond", "treatment", "week", "genotype", "value")
+
+mdata.df <- rbind(mdata0, mdata2)
+```
+
+## Figures 2A and 2B: circular plot
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Convert 'week' to numeric and exclude week 0
+mdata.df$week_numeric <- as.numeric(gsub("w", "", mdata.df$week))
+#mdata.df$week <- as.numeric(gsub("w", "", mdata.df$week))
+mdata.df.filtered <- mdata.df %>% filter(week_numeric != 0)
+
+# 🔹 Prepare data for all plots
+genotype_data <- mdata.df.filtered %>%
+  group_by(genotype, treatment, week_numeric) %>%
+  summarize(mean_value = mean(value), .groups = "drop")
+
+custom_colors <- c("control" = "#0072B2", "herbivory" = "#D55E00")
+custom_labels <- c("11" = "Week 11", "61" = "Week 61")
+
+px6 <- ggplot(genotype_data, aes(x = genotype, y = mean_value, fill = treatment)) +
+  geom_bar(stat = "identity") +
+  coord_polar(start = 0) +  # Convert to circular
+  facet_wrap(~week_numeric, labeller = as_labeller(custom_labels)) +  # Use custom labels
+  scale_fill_manual(values = custom_colors) +
+  scale_y_continuous(breaks = seq(0, max(genotype_data$mean_value), length.out = 3), 
+                     labels = function(x) sprintf("%.2f", floor(x * 100) / 100)) +
+  theme_minimal() +
+  theme(panel.grid.major.y = element_line(size = 0.5),
+        panel.grid.minor.y = element_blank(),
+        plot.margin = margin(0, 20, 0, 20),
+        axis.text.x = element_text(angle = 360, color = "black", size = 16),
+        axis.text.y = element_text(size = 16, color = "black"),
+        axis.title.y = element_text(size = 20, vjust = 3),
+        legend.position = "none",
+        panel.spacing = unit(2, "lines"),
+        strip.text = element_text(size = 20, face ="bold")) +  # Increase facet label size
+  labs(x = "", y = "Genotypes frequencies")
+
+px6
+```
+
+##  Figures 2C–F + Figure S4: per-genotype time series
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+plot.fun <- function(gtype, ylabel, siglabel){
+  mdata.plot <- mdata.df %>% filter(genotype == gtype)
+  px <- ggplot(mdata.plot, aes(x = week, y = value, fill = treatment, color = treatment)) +  
+    theme_bw(base_size = 14) +
+    stat_summary(fun = mean, geom = "pointrange", fun.max = function(x) mean(x) + std.error(x), fun.min = function(x) mean(x) - std.error(x), position=position_dodge(0)) +
+    theme(axis.title.x=element_blank(),
+          axis.text.x = element_text(color="black"),
+          axis.text.y = element_text(color="black"),
+          axis.title.y = element_text(color="black"),
+          legend.position = "none",
+          panel.grid = element_blank()) +
+    scale_fill_manual(name = "Legend", values=c("#252525", "#0072B2", "#D55E00"), labels = c("Starting", "Control", "Herbivory"), breaks = c("other_sample", "control", "herbivory")) +
+    scale_color_manual(name = "Legend", values=c("#252525", "#0072B2", "#D55E00"), labels = c("Starting", "Control", "Herbivory"), breaks = c("other_sample", "control", "herbivory")) +
+    scale_x_discrete(name = "Legend", labels = c("0", "11", "61"), breaks = c("w0", "w11", "w61")) +
+    
+    geom_segment(aes(x=1,xend=2,
+                     y= mean(mdata.plot[which(mdata.plot$treatment == "other_sample" & mdata.plot$week == "w0"),]$value),
+                     yend=mean(mdata.plot[which(mdata.plot$treatment == "control" & mdata.plot$week == "w11"),]$value)),
+                 color = "#0072B2") +
+    
+    geom_segment(aes(x=2,xend=3,
+                     y= mean(mdata.plot[which(mdata.plot$treatment == "control" & mdata.plot$week == "w11"),]$value),
+                     yend=mean(mdata.plot[which(mdata.plot$treatment == "control" & mdata.plot$week == "w61"),]$value)),
+                 color = "#0072B2") +
+    
+    geom_segment(aes(x=1,xend=2,
+                     y= mean(mdata.plot[which(mdata.plot$treatment == "other_sample" & mdata.plot$week == "w0"),]$value),
+                     yend=mean(mdata.plot[which(mdata.plot$treatment == "herbivory" & mdata.plot$week == "w11"),]$value)),
+                 color = "#D55E00") +
+    
+    
+    geom_segment(aes(x=2,xend=3,
+                     y= mean(mdata.plot[which(mdata.plot$treatment == "herbivory" & mdata.plot$week == "w11"),]$value),
+                     yend=mean(mdata.plot[which(mdata.plot$treatment == "herbivory" & mdata.plot$week == "w61"),]$value)),
+                 color = "#D55E00") +
+    
+    
+    annotate("text", x = 3.3, 
+             y =  (mean(mdata.plot[which(mdata.plot$treatment == "control" & mdata.plot$week == "w61"),]$value) +
+                     mean(mdata.plot[which(mdata.plot$treatment == "herbivory" & mdata.plot$week == "w61"),]$value))/2,
+             label = paste0(siglabel), size = 1) +
+    
+    ggtitle(paste0(gtype)) +
+    
+        scale_y_continuous(labels = scales::number_format(accuracy = 0.01)) +
+    labs(y = paste0(ylabel))
+  
+  return(px)
+}
+
+px1 <- plot.fun("Sp020", "Genotype frequency", " ")
+px2 <- plot.fun("Sp021", " ", " ")
+px3 <- plot.fun("Sp023", " ", " ")
+px4 <- plot.fun("Sp027", " ", " ")
+px5 <- plot.fun("Sp029", " ", " ")
+px6 <- plot.fun("Sp031", " ", " ")
+px7 <- plot.fun("Sp034", " ", " ")
+px8 <- plot.fun("Sp042", " ", " ")
+px9 <- plot.fun("Sp049", "", " ")
+px10 <- plot.fun("Sp056", " ", " ")
+px11 <- plot.fun("Sp058", " ", " ")
+px12 <- plot.fun("Sp062", " ", " ")
+px13 <- plot.fun("Sp065", " ", " ")
+px14 <- plot.fun("Sp066", " ", " ")
+px15 <- plot.fun("Sp067", " ", " ")
+px16 <- plot.fun("Sp070", " ", " ")
+px17 <- plot.fun("Sp074", " ", " ")
+px18 <- plot.fun("Sp102", " ", " ")
+px19 <- plot.fun("Sp103", " ", " ")
+px20 <- plot.fun("SP190", " ", " ")
+px21 <- plot.fun("SP193", " ", " ")
+px22 <- plot.fun("SP214", " ", " ")
+px23 <- plot.fun("SP217", " ", " ")
+px24 <- plot.fun("SP219", " ", " ")
+
+px <- ggarrange(
+  px1, px2, px3, px4, px5, px6,
+  px7, px8, px9, px10, px11, px12,
+  px13, px14, px15, px16, px17, px18,
+  px19, px20, px21, px22, px23, px24,
+  ncol = 4, nrow = 6,
+  labels = c("a.", "b.", "c.", "d.", "e.", "f.",
+             "g.", "h.", "i.", "j.", "k.", "l.",
+             "m.", "n.", "o.", "p.", "q.", "r.",
+             "s.", "t.", "u.", "v.", "w.", "x."),
+  common.legend = TRUE,
+  align = "hv",               # Align horizontal & vertical axes
+  widths = rep(1, 4),         # Force equal widths for each column
+  heights = rep(1, 6)         # Force equal heights for each row
+)
+
+px
+```
+
+## Table S3: mixed model
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+mdata.df2 <- mdata.df[which(mdata.df$treatment != "other_sample"),]
+model <- lmer(value ~ treatment * genotype + (1|pond) + (1|week), data = mdata.df2)
+Anova(model, test.statistic = 'F')
+```
