@@ -1,0 +1,294 @@
+---
+title: "macroalgae and chlorophyll-a concentration"
+author: "Sara Nouere"
+output: html_document
+---
+## Introduction
+
+This document investigates the temporal dynamics of macroalgae concentration in control vs herbivory treatments, and analyzes Chlorophyll-a concentrations (nmol/L) under different treatments over time.
+
+**Note:** This R Markdown document is used to generate **Figure 1D** in manuscript and **FigureS2D** in supplementary.
+
+### Figure 1D
+## Load required libraries
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(plotrix)   
+library(lme4)      
+library(car)       
+```
+
+## Load and prepare data
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+df <- read.table("datamacroalgae.txt", sep = "\t", header = TRUE)
+
+# Convert treatment to lowercase
+df <- df %>%
+  mutate(treatment = tolower(treatment))
+
+# Summarize macroalgae data
+mdata.plot <- df %>%
+  group_by(year, timepoint, treatment) %>%
+  summarise(
+    macroalgae_av = mean(macroalgae, na.rm = TRUE),
+    macroalgae_se = std.error(macroalgae),
+    .groups = "drop"
+  )
+
+# Transformation function
+transform_x <- function(x) {
+  ifelse(x < 18, x, 
+         ifelse(x >= 18 & x <= 48, 18 + (x - 18) / 15, 
+                18 + (48 - 18) / 15 + (x - 48) * 1))
+}
+```
+
+## Precompute values for segment lines
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+get_val <- function(tp, treat) {
+  mdata.plot$macroalgae_av[mdata.plot$timepoint == tp & mdata.plot$treatment == treat]
+}
+
+# Control
+ctrl_0  <- get_val(0,  "control")
+ctrl_5  <- get_val(5,  "control")
+ctrl_7  <- get_val(7,  "control")
+ctrl_11 <- get_val(11, "control")
+ctrl_13 <- get_val(13, "control")
+ctrl_51 <- get_val(51, "control")
+ctrl_54 <- get_val(54, "control")
+ctrl_59 <- get_val(59, "control")
+ctrl_61 <- get_val(61, "control")
+ctrl_63 <- get_val(63, "control")
+
+# Herbivory
+herb_0  <- get_val(0,  "herbivory")
+herb_5  <- get_val(5,  "herbivory")
+herb_7  <- get_val(7,  "herbivory")
+herb_11 <- get_val(11, "herbivory")
+herb_13 <- get_val(13, "herbivory")
+herb_51 <- get_val(51, "herbivory")
+herb_54 <- get_val(54, "herbivory")
+herb_59 <- get_val(59, "herbivory")
+herb_61 <- get_val(61, "herbivory")
+herb_63 <- get_val(63, "herbivory")
+```
+
+## Plot 1D: macroalgae over time
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+px1D <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = macroalgae_av, color = treatment)) +
+  theme_bw(base_size = 14) +
+  geom_pointrange(aes(ymin = macroalgae_av - macroalgae_se, ymax = macroalgae_av + macroalgae_se),
+                  position = position_dodge(0.9)) +
+  theme(axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"),
+        axis.text.y = element_text(color = "black"),
+        axis.title.y = element_text(color = "black"),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Legend", values = c("#00afbb", "#D55E00"),
+                     labels = c("control", "herbivory"),
+                     breaks = c("control", "herbivory")) +
+  scale_x_continuous(
+    breaks = transform_x(c(0, 3, 6, 9, 12, 15, 18, 48, 51, 54, 57, 60, 63)),
+    labels = c("0", "3", "6", "9", "12", "15", "18", "48", "51", "54", "57", "60", "63")
+  ) +
+  expand_limits(x = c(0, transform_x(65)), y = 0) +
+  annotate("rect", xmin = transform_x(18), xmax = transform_x(48),
+           ymin = -Inf, ymax = Inf, fill = "#B0B0B0", color = NA) +
+  
+  # Segments - control
+  geom_segment(aes(x = transform_x(0) - 0.2, xend = transform_x(5) - 0.2, y = ctrl_0, yend = ctrl_5), color = "#00afbb", inherit.aes = FALSE) +
+  geom_segment(aes(x = transform_x(5) - 0.2, xend = transform_x(7) - 0.2, y = ctrl_5, yend = ctrl_7), color = "#00afbb", inherit.aes = FALSE) +
+  geom_segment(aes(x = transform_x(7) - 0.2, xend = transform_x(11) - 0.2, y = ctrl_7, yend = ctrl_11), color = "#00afbb", inherit.aes = FALSE) +
+  geom_segment(aes(x = transform_x(11) - 0.2, xend = transform_x(13) - 0.2, y = ctrl_11, yend = ctrl_13), color = "#00afbb", inherit.aes = FALSE) +
+  
+  # Segments - herbivory
+  geom_segment(aes(x = transform_x(0) + 0.2, xend = transform_x(5) + 0.2, y = herb_0, yend = herb_5), color = "#D55E00", inherit.aes = FALSE) +
+  geom_segment(aes(x = transform_x(5) + 0.2, xend = transform_x(7) + 0.2, y = herb_5, yend = herb_7), color = "#D55E00", inherit.aes = FALSE) +
+  geom_segment(aes(x = transform_x(7) + 0.2, xend = transform_x(11) + 0.2, y = herb_7, yend = herb_11), color = "#D55E00", inherit.aes = FALSE) +
+  geom_segment(aes(x = transform_x(11) + 0.2, xend = transform_x(13) + 0.2, y = herb_11, yend = herb_13), color = "#D55E00", inherit.aes = FALSE) +
+  
+  # Dashed segment to week 51
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51), y = ctrl_13, yend = ctrl_51),
+               color = "#00afbb", linetype = "dashed", inherit.aes = FALSE) +
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51), y = herb_13, yend = herb_51),
+               color = "#D55E00", linetype = "dashed", inherit.aes = FALSE) +
+  
+  # Later control
+  geom_segment(aes(x = transform_x(51) - 0.2, xend = transform_x(54) - 0.2, y = ctrl_51, yend = ctrl_54), color = "#00afbb", inherit.aes = FALSE) +
+  geom_segment(aes(x = transform_x(54) - 0.2, xend = transform_x(59) - 0.2, y = ctrl_54, yend = ctrl_59), color = "#00afbb", inherit.aes = FALSE) +
+  geom_segment(aes(x = transform_x(59) - 0.2, xend = transform_x(61) - 0.2, y = ctrl_59, yend = ctrl_61), color = "#00afbb", inherit.aes = FALSE) +
+  geom_segment(aes(x = transform_x(61) - 0.2, xend = transform_x(63) - 0.2, y = ctrl_61, yend = ctrl_63), color = "#00afbb", inherit.aes = FALSE) +
+  
+  # Later herbivory
+  geom_segment(aes(x = transform_x(51) + 0.2, xend = transform_x(54) + 0.2, y = herb_51, yend = herb_54), color = "#D55E00", inherit.aes = FALSE) +
+  geom_segment(aes(x = transform_x(54) + 0.2, xend = transform_x(59) + 0.2, y = herb_54, yend = herb_59), color = "#D55E00", inherit.aes = FALSE) +
+  geom_segment(aes(x = transform_x(59) + 0.2, xend = transform_x(61) + 0.2, y = herb_59, yend = herb_61), color = "#D55E00", inherit.aes = FALSE) +
+  geom_segment(aes(x = transform_x(61) + 0.2, xend = transform_x(63) + 0.2, y = herb_61, yend = herb_63), color = "#D55E00", inherit.aes = FALSE) +
+  
+  labs(x = "Time (weeks)", y = "Macroalgae concentration")
+
+px1D
+```
+
+## Statistical analysis
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+df1 <- df %>%
+  filter(timepoint %in% c(59, 61, 63)) %>%
+  mutate(
+    macroalgae_prop = (macroalgae + 0.01) / 100.02,  
+    macroalgae_logit = log(macroalgae_prop / (1 - macroalgae_prop))
+  )
+
+model <- lmer(macroalgae_logit~ treatment + (1|timepoint) + (1|pond), data = df1)
+Anova(model,test="F")
+```
+
+### FigureS2D
+## Data import and summary
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+df <- read.table("chla.txt", sep = "\t", header = TRUE)
+
+mdata.plot <- df %>%
+  group_by(year, timepoint, treatment) %>%
+  summarise(
+    chla_av = mean(Chlorophyll_a),
+    chla_se = std.error(Chlorophyll_a),
+    .groups = 'drop'
+  ) %>%
+  subset(timepoint %in% c(0, 7, 11, 13, 59, 61, 63))
+```
+
+## X-axis transformation function
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+transform_x <- function(x) {
+  ifelse(x < 18, x,
+         ifelse(x >= 18 & x <= 48, 18 + (x - 18) / 15,
+                18 + (48 - 18) / 15 + (x - 48) * 1))
+}
+```
+
+## Plot S2D: Chlorophyll-a concentrations
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+px4 <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = chla_av, color = treatment)) +
+  theme_bw(base_size = 14) +
+  geom_pointrange(aes(ymin = chla_av - chla_se, ymax = chla_av + chla_se), position = position_dodge(0.9)) +
+  theme(axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"),
+        axis.text.y = element_text(color = "black"),
+        axis.title.y = element_text(color = "black"),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Legend", values = c("#0072B2", "#D55E00"),
+                     labels = c("control", "herbivory"),
+                     breaks = c("control", "herbivory")) +
+  scale_x_continuous(
+    breaks = transform_x(c(0, 3, 6, 9, 12, 15, 18, 48, 51, 54, 57, 60, 63)),
+    labels = c("0", "3", "6", "9", "12", "15", "18", "48", "51", "54", "57", "60", "63")
+  ) +
+  expand_limits(x = c(0, transform_x(65)), y = 0) +
+  geom_rect(aes(xmin = transform_x(18), xmax = transform_x(48), ymin = -Inf, ymax = Inf),
+            fill = "#B0B0B0", color = "transparent", inherit.aes = FALSE) +
+  
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) - 0.2, xend = transform_x(7) - 0.2,
+                   y = chla_av[treatment == "control" & timepoint == 0],
+                   yend = chla_av[treatment == "control" & timepoint == 7]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) - 0.2, xend = transform_x(11) - 0.2,
+                   y = chla_av[treatment == "control" & timepoint == 7],
+                   yend = chla_av[treatment == "control" & timepoint == 11]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) - 0.2, xend = transform_x(13) - 0.2,
+                   y = chla_av[treatment == "control" & timepoint == 11],
+                   yend = chla_av[treatment == "control" & timepoint == 13]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) + 0.2, xend = transform_x(7) + 0.2,
+                   y = chla_av[treatment == "herbivory" & timepoint == 0],
+                   yend = chla_av[treatment == "herbivory" & timepoint == 7]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) + 0.2, xend = transform_x(11) + 0.2,
+                   y = chla_av[treatment == "herbivory" & timepoint == 7],
+                   yend = chla_av[treatment == "herbivory" & timepoint == 11]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) + 0.2, xend = transform_x(13) + 0.2,
+                   y = chla_av[treatment == "herbivory" & timepoint == 11],
+                   yend = chla_av[treatment == "herbivory" & timepoint == 13]),
+               color = "#D55E00") +
+  
+  geom_segment(aes(x = transform_x(13), xend = transform_x(59),
+                   y = chla_av[mdata.plot$treatment == "control" & mdata.plot$timepoint == 13],
+                   yend = chla_av[mdata.plot$treatment == "control" & mdata.plot$timepoint == 59]),
+               color = "#0072B2", linetype = "dashed") +
+  
+  geom_segment(aes(x = transform_x(13), xend = transform_x(59),
+                   y = chla_av[mdata.plot$treatment == "herbivory" & mdata.plot$timepoint == 13],
+                   yend = chla_av[mdata.plot$treatment == "herbivory" & mdata.plot$timepoint == 59]),
+               color = "#D55E00", linetype = "dashed") +
+  
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) - 0.2, xend = transform_x(61) - 0.2,
+                   y = chla_av[treatment == "control" & timepoint == 59],
+                   yend = chla_av[treatment == "control" & timepoint == 61]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) - 0.2, xend = transform_x(63) - 0.2,
+                   y = chla_av[treatment == "control" & timepoint == 61],
+                   yend = chla_av[treatment == "control" & timepoint == 63]),
+               color = "#0072B2") +
+  
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) + 0.2, xend = transform_x(61) + 0.2,
+                   y = chla_av[treatment == "herbivory" & timepoint == 59],
+                   yend = chla_av[treatment == "herbivory" & timepoint == 61]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) + 0.2, xend = transform_x(63) + 0.2,
+                   y = chla_av[treatment == "herbivory" & timepoint == 61],
+                   yend = chla_av[treatment == "herbivory" & timepoint == 63]),
+               color = "#D55E00") +
+  
+  labs(x = "Time (weeks)",
+       y = "Chlorophyll-a (nmol/L)")
+
+px4
+```
+
+## Statistical analysis
+### First season: timepoints (weeks 7, 11, 13)
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+df1 <- df %>%
+  filter(timepoint %in% c(7, 11, 13))
+
+model <- lmer(Chlorophyll_a ~ treatment + (timepoint|pond), data = df1)
+Anova(model,test="F")
+```
+
+### Second season: timepoints (weeks 59, 61, 63)
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+df2 <- df %>%
+  filter(timepoint %in% c(59, 61, 63))
+
+model <- lmer(Chlorophyll_a ~ treatment + (timepoint|pond), data = df2)
+Anova(model,test="F")
+```
