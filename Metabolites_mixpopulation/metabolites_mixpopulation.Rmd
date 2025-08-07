@@ -1,0 +1,208 @@
+---
+title: "Metabolites_mixpopulation"
+author: "Sara Nouere"
+output: html_document
+---
+## Introduction
+This document analyzes metabolites of the mixed population under different treatments 2023 and 2024. It includes: metabolite differential analysis and volcano plots
+
+**Note:** This R Markdown document is used to generate **Figure S3A-S3B** in the manuscript.
+
+## Load required libraries
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+library("dplyr")
+library("ggplot2")
+library("cowplot")
+library("ggpubr")
+library("lme4")
+library("car")
+library("emmeans")
+library("readxl")
+library("writexl")
+library("tidyverse")
+library("plotrix") 
+library("scales")
+library("viridis")
+library("ggrepel")
+library("tidyr")
+library("data.table")
+```
+
+## Load and analyze first dataset: 2023
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+df <- read.table("data2023_metabolites.txt", sep = "\t", header = TRUE)
+
+data.long <- data %>% gather(metabolite, value, 7:45)
+data.filtered <- data.long[!(data.long$value == "NA"), ]
+data.filtered$value <- as.numeric(data.filtered$value)
+data.filtered$block <- as.character(data.filtered$block)
+
+group.data.long <- group_by(data.filtered, metabolite)
+list.mol <- unique(as.character(data.filtered$metabolite))
+
+model_calculator.1 <- sapply(list.mol, function(x) {
+  data.s <- group.data.long[group.data.long$metabolite == x, ]
+  model <- lmer(value ~ treatment + (1|timepoint) + (1|block), data = data.s)
+  aaa <- Anova(model, test = "F")
+  aaa$sig <- rep('', length(aaa$`Pr(>F)`))
+  makeStars <- function(x) {
+    stars <- c("****", "***", "**", "*", "ns")
+    vec <- c(0, 0.0001, 0.001, 0.01, 0.05, 1)
+    i <- findInterval(x, vec)
+    stars[i]
+  }
+  aaa$sig <- makeStars(aaa$`Pr(>F)`)
+  aaa <- aaa["treatment", , drop = FALSE]
+  return(aaa)
+}, simplify = FALSE, USE.NAMES = TRUE)
+
+res <- do.call(rbind, model_calculator.1)
+res <- setDT(res, keep.rownames = TRUE)[]
+
+table.analysis.1 <- data.filtered %>%
+  filter(treatment == "control") %>%
+  group_by(metabolite) %>%
+  summarize(control = mean(value, na.rm = TRUE))
+
+table.analysis.2 <- data.filtered %>%
+  filter(treatment == "herbivory") %>%
+  group_by(metabolite) %>%
+  summarize(herbivory = mean(value, na.rm = TRUE))
+
+res.def <- merge(res, table.analysis.1, by.x = "rn", by.y = "metabolite")
+res.def <- merge(res.def, table.analysis.2, by.x = "rn", by.y = "metabolite")
+res.def$log2FoldChange <- log2(res.def$herbivory / res.def$control)
+
+de <- res.def
+names(de)[names(de) == 'Pr(>F)'] <- 'pvalue'
+de$pvalue <- p.adjust(de$pvalue, method = 'fdr')
+de$diffexpressed <- "no changes"
+de$diffexpressed[de$log2FoldChange > 0.1 & de$pvalue < 0.05] <- "herbivory"
+de$diffexpressed[de$log2FoldChange < -0.1 & de$pvalue < 0.05] <- "control"
+```
+
+## Load and analyze second dataset
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+df <- read.table("data2024_metabolites.txt", sep = "\t", header = TRUE)
+
+data.long.2 <- data.2 %>% gather(metabolite, value, 7:38)
+data.filtered.2 <- data.long.2[!(data.long.2$value == "NA"), ]
+data.filtered.2$value <- as.numeric(data.filtered.2$value)
+data.filtered.2$block <- as.character(data.filtered.2$block)
+
+group.data.long.2 <- group_by(data.filtered.2, metabolite)
+list.mol.2 <- unique(as.character(data.filtered.2$metabolite))
+
+model_calculator.2 <- sapply(list.mol.2, function(x) {
+  data.s.2 <- group.data.long.2[group.data.long.2$metabolite == x, ]
+  model.2 <- lmer(value ~ treatment + (1|timepoint) + (1|block), data = data.s.2)
+  aaa.2 <- Anova(model.2, test = "F")
+  aaa.2$sig <- rep('', length(aaa.2$`Pr(>F)`))
+  makeStars <- function(x) {
+    stars <- c("****", "***", "**", "*", "ns")
+    vec <- c(0, 0.0001, 0.001, 0.01, 0.05, 1)
+    i <- findInterval(x, vec)
+    stars[i]
+  }
+  aaa.2$sig <- makeStars(aaa.2$`Pr(>F)`)
+  aaa.2 <- aaa.2["treatment", , drop = FALSE]
+  return(aaa.2)
+}, simplify = FALSE, USE.NAMES = TRUE)
+
+res.2 <- do.call(rbind, model_calculator.2)
+res.2 <- setDT(res.2, keep.rownames = TRUE)[]
+
+table.analysis.1.2 <- data.filtered.2 %>%
+  filter(treatment == "control") %>%
+  group_by(metabolite) %>%
+  summarize(control = mean(value, na.rm = TRUE))
+
+table.analysis.2.2 <- data.filtered.2 %>%
+  filter(treatment == "herbivory") %>%
+  group_by(metabolite) %>%
+  summarize(herbivory = mean(value, na.rm = TRUE))
+
+res.def.2 <- merge(res.2, table.analysis.1.2, by.x = "rn", by.y = "metabolite")
+res.def.2 <- merge(res.def.2, table.analysis.2.2, by.x = "rn", by.y = "metabolite")
+res.def.2$log2FoldChange <- log2(res.def.2$herbivory / res.def.2$control)
+
+de.2 <- res.def.2
+names(de.2)[names(de.2) == 'Pr(>F)'] <- 'pvalue'
+de.2$pvalue <- p.adjust(de.2$pvalue, method = 'fdr')
+de.2$diffexpressed <- "no changes"
+de.2$diffexpressed[de.2$log2FoldChange > 0.1 & de.2$pvalue < 0.05] <- "herbivory"
+de.2$diffexpressed[de.2$log2FoldChange < -0.1 & de.2$pvalue < 0.05] <- "control"
+```
+
+## Step to sync Y-Axis
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+# Get maximum -log10(pvalue) from both datasets
+max_y1 <- max(-log10(de$pvalue), na.rm = TRUE)
+max_y2 <- max(-log10(de.2$pvalue), na.rm = TRUE)
+
+# Get a common y-axis upper limit
+y_max <- ceiling(max(max_y1, max_y2))
+```
+
+## Volcano plot for first dataset: 2023
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+plot <- ggplot(data = de) +
+  theme_bw(base_size = 14) +
+  geom_point(aes(x = log2FoldChange, y = -log10(pvalue), colour = diffexpressed), size = 4) +
+  geom_text_repel(aes(x = log2FoldChange, y = -log10(pvalue), label = ifelse(diffexpressed != "no changes", rn, "")), max.overlaps = 60) +
+  scale_color_manual(values = c("blue", "red", "black")) +
+  geom_vline(xintercept = 0, col = "black", linetype = "longdash") +
+  geom_hline(yintercept = -log10(0.05), col = "black", linetype = "longdash") +
+  scale_y_continuous(limits = c(0, y_max)) +  # <-- 🔥 FIX Y-AXIS
+  xlab(expression(paste(Log[2], " Fold Changes"))) +
+  ylab(expression(paste(-Log[10], " P"))) +
+  theme(
+    legend.justification = c(0.99, 0.99),
+    legend.position = c(0.99, 0.99),
+    panel.grid = element_blank(),
+    legend.title = element_blank(),
+    legend.background = element_rect(color = NA),
+    legend.key = element_rect(color = NA),
+    panel.border = element_rect(colour = "black", fill = NA, size = 1)
+  )
+
+plot
+```
+
+## Volcano plot for second dataset
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+plot.2 <- ggplot(data = de.2) +
+  theme_bw(base_size = 14) +
+  geom_point(aes(x = log2FoldChange, y = -log10(pvalue), colour = diffexpressed), size = 4) +
+  geom_text_repel(aes(x = log2FoldChange, y = -log10(pvalue), label = ifelse(diffexpressed != "no changes", rn, "")), max.overlaps = 60) +
+  scale_color_manual(values = c("blue", "red", "black")) +
+  geom_vline(xintercept = 0, col = "black", linetype = "longdash") +
+  geom_hline(yintercept = -log10(0.05), col = "black", linetype = "longdash") +
+  scale_y_continuous(limits = c(0, y_max)) +  # <-- 🔥 FIX Y-AXIS
+  xlab(expression(paste(Log[2], " Fold Changes"))) +
+  ylab(expression(paste(-Log[10], " P"))) +
+  theme(
+    legend.justification = c(0.99, 0.99),
+    legend.position = c(0.99, 0.99),
+    panel.grid = element_blank(),
+    legend.title = element_blank(),
+    legend.background = element_rect(color = NA),
+    legend.key = element_rect(color = NA),
+    panel.border = element_rect(colour = "black", fill = NA, size = 1)
+  )
+
+plot.2
+```
+
+## Combine both volcano plots
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+combined_plot <- ggarrange(plot, plot.2, labels = c("A", "B"), ncol = 2, nrow = 1)
+combined_plot
+```
