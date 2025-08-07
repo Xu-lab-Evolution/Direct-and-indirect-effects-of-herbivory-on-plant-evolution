@@ -1,0 +1,13 @@
+sample	type	category	ID_pond	treatment	week	pond_group
+EW27	experimental	experimental	4A	herbivory	w61	1
+EW28	experimental	experimental	4B    	control	w61	1
+EW29	experimental	experimental	4C	control	w61	1
+EW30	experimental	experimental	4D	herbivory	w61	1
+EW31	experimental	experimental	5A	herbivory	w61	2
+EW32	experimental	experimental	5B	control	w61	2
+EW33	experimental	experimental	5C	control	w61	2
+EW34	experimental	experimental	7B	herbivory	w61	3
+EW35	experimental	experimental	7C	herbivory	w61	3
+EW36	experimental	experimental	7D	control	w61	3
+EW37	experimental	experimental	8B	control	w61	4
+EW38	experimental	experimental	8D	herbivory	w61	4
