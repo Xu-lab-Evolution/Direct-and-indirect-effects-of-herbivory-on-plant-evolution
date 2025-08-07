@@ -1,0 +1,271 @@
+---
+title: "Morphology"
+author: "Sara Nouere"
+output: html_document
+---
+## Introduction
+This document analyzes the morphology: dry weight and surface area in both treatments (control and snail herbivory).
+
+**Note:** This R Markdown document is used to generate **Figure S2A** and **Figure S2B** in the supplementary.
+
+### Figure S2A
+## Load required libraries
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(plotrix)   
+library(lme4)
+library(car)
+```
+
+## Load and summarize data
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+df <- read.table("morphology_data.txt", sep = "\t", header = T)
+
+mdata.plot <- df %>% group_by(year, timepoint, treatment) %>% dplyr::summarise(area_av = mean(area_fr),
+                                                                        area_se = std.error(area_fr),
+                                                                        weight_av = mean(biomass_fr),
+                                                                        weight_se = std.error(biomass_fr))
+
+
+transform_x <- function(x) {
+  ifelse(x < 18, x,  # Normal spacing before 18
+         ifelse(x >= 18 & x <= 48, 18 + (x - 18) / 15,  # Compression for 18-48
+                18 + (48 - 18) / 15 + (x - 48) * 1))  # Smooth continuation after 48
+}
+```
+
+## Plot S2A: biomass per frond
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+pxS2A <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = weight_av, color = treatment)) +
+  theme_bw(base_size = 14) +
+  geom_pointrange(aes(ymin = weight_av - weight_se, ymax = weight_av + weight_se), position = position_dodge(0.9)) +
+  theme(axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"),
+        axis.text.y = element_text(color = "black"),
+        axis.title.y = element_text(color = "black"),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Legend", values = c("#636363", "#0072B2", "#D55E00"),
+                     labels = c("starting", "control", "herbivory"),
+                     breaks = c("starting", "control", "herbivory")) +
+  scale_x_continuous(
+    breaks = transform_x(c(0, 3, 6, 9, 12, 15, 18, 48, 51, 54, 57, 60, 63)),  # Transform the breaks
+    labels = c("0", "3", "6", "9", "12", "15", "18", "48", "51", "54", "57", "60", "63")  # Labels remain original
+  ) +
+  expand_limits(x = c(0, transform_x(65)), y = 0) +
+  
+  # Grey area for compressed section
+  geom_rect(aes(xmin = transform_x(18), xmax = transform_x(48), ymin = -Inf, ymax = Inf), 
+            fill = "#B0B0B0", color = "transparent", inherit.aes = FALSE) +
+  
+  # Add geom_segment layers
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0), xend = transform_x(7),
+                   y = weight_av[mdata.plot$treatment == "starting" & mdata.plot$timepoint == 0],
+                   yend = weight_av[mdata.plot$treatment == "control" & mdata.plot$timepoint == 7]),
+               color = "#0072B2") +
+  
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0), xend = transform_x(7),
+                   y = weight_av[mdata.plot$treatment == "starting" & mdata.plot$timepoint == 0],
+                   yend = weight_av[mdata.plot$treatment == "herbivory" & mdata.plot$timepoint == 7]),
+               color = "#D55E00") +
+
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) - 0.2, xend = transform_x(11) - 0.2,
+                   y = weight_av[treatment == "control" & timepoint == 7],
+                   yend = weight_av[treatment == "control" & timepoint == 11]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) - 0.2, xend = transform_x(13) - 0.2,
+                   y = weight_av[treatment == "control" & timepoint == 11],
+                   yend = weight_av[treatment == "control" & timepoint == 13]),
+               color = "#0072B2") +
+  
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) + 0.2, xend = transform_x(11) + 0.2,
+                   y = weight_av[treatment == "herbivory" & timepoint == 7],
+                   yend = weight_av[treatment == "herbivory" & timepoint == 11]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) + 0.2, xend = transform_x(13) + 0.2,
+                   y = weight_av[treatment == "herbivory" & timepoint == 11],
+                   yend = weight_av[treatment == "herbivory" & timepoint == 13]),
+               color = "#D55E00") +
+  
+  geom_segment(aes(x = transform_x(13), xend = transform_x(59),
+                   y = weight_av[mdata.plot$treatment == "control" & mdata.plot$timepoint == 13],
+                   yend = weight_av[mdata.plot$treatment == "control" & mdata.plot$timepoint == 59]),
+               color = "#0072B2", linetype = "dashed") +
+  
+  geom_segment(aes(x = transform_x(13), xend = transform_x(59),
+                   y = weight_av[mdata.plot$treatment == "herbivory" & mdata.plot$timepoint == 13],
+                   yend = weight_av[mdata.plot$treatment == "herbivory" & mdata.plot$timepoint == 59]),
+               color = "#0072B2", linetype = "dashed") +
+  
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) - 0.2, xend = transform_x(61) - 0.2,
+                   y = weight_av[treatment == "control" & timepoint == 59],
+                   yend = weight_av[treatment == "control" & timepoint == 61]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) - 0.2, xend = transform_x(63) - 0.2,
+                   y = weight_av[treatment == "control" & timepoint == 61],
+                   yend = weight_av[treatment == "control" & timepoint == 63]),
+               color = "#0072B2") +
+  
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) + 0.2, xend = transform_x(61) + 0.2,
+                   y = weight_av[treatment == "herbivory" & timepoint == 59],
+                   yend = weight_av[treatment == "herbivory" & timepoint == 61]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) + 0.2, xend = transform_x(63) + 0.2,
+                   y = weight_av[treatment == "herbivory" & timepoint == 61],
+                   yend = weight_av[treatment == "herbivory" & timepoint == 63]),
+               color = "#D55E00") +
+  
+  labs(x = "Time (weeks)",
+       y = "Biomass per frond (mg)")
+
+pxS2A
+```
+
+## Statistical analysis: biomass per frond
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+df1 <- df %>%
+  filter(timepoint %in% c(7, 11, 13))
+
+model <- lmer(biomass_fr ~ treatment + (1|timepoint)+ (1|pond), data = df1)
+Anova(model,test="F")
+
+
+df2 <- df %>%
+  filter(timepoint %in% c(59, 61, 63))
+
+model <- lmer(biomass_fr ~ treatment + (1|timepoint)+ (1|pond), data = df2)
+Anova(model,test="F")
+```
+
+### Figure S2B
+## Plot S2B: area per frond
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+pxS2B <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = area_av, color = treatment)) +
+  theme_bw(base_size = 14) +
+  geom_pointrange(aes(ymin = area_av - area_se, ymax = area_av + area_se), position = position_dodge(0.9)) +
+  theme(axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"),
+        axis.text.y = element_text(color = "black"),
+        axis.title.y = element_text(color = "black"),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Legend", values = c("#636363", "#0072B2", "#D55E00"),
+                     labels = c("starting", "control", "herbivory"),
+                     breaks = c("starting", "control", "herbivory")) +
+  scale_x_continuous(
+    breaks = transform_x(c(0, 3, 6, 9, 12, 15, 18, 48, 51, 54, 57, 60, 63)),  # Transform the breaks
+    labels = c("0", "3", "6", "9", "12", "15", "18", "48", "51", "54", "57", "60", "63")  # Labels remain original
+  ) +
+  expand_limits(x = c(0, transform_x(65)), y = 0) +
+  
+  # Grey area for compressed section
+  geom_rect(aes(xmin = transform_x(18), xmax = transform_x(48), ymin = -Inf, ymax = Inf), 
+            fill = "#B0B0B0", color = "transparent", inherit.aes = FALSE) +
+  
+  # Add geom_segment layers
+  
+  geom_segment(aes(x = transform_x(0), xend = transform_x(7),
+                   y = area_av[mdata.plot$treatment == "starting" & mdata.plot$timepoint == 0],
+                   yend = area_av[mdata.plot$treatment == "control" & mdata.plot$timepoint == 7]),
+               color = "#0072B2") +
+  
+  geom_segment(aes(x = transform_x(0), xend = transform_x(7),
+                   y = area_av[mdata.plot$treatment == "starting" & mdata.plot$timepoint == 0],
+                   yend = area_av[mdata.plot$treatment == "herbivory" & mdata.plot$timepoint == 7]),
+               color = "#D55E00") +
+  
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) - 0.2, xend = transform_x(11) - 0.2,
+                   y = area_av[treatment == "control" & timepoint == 7],
+                   yend = area_av[treatment == "control" & timepoint == 11]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) - 0.2, xend = transform_x(13) - 0.2,
+                   y = area_av[treatment == "control" & timepoint == 11],
+                   yend = area_av[treatment == "control" & timepoint == 13]),
+               color = "#0072B2") +
+  
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) + 0.2, xend = transform_x(11) + 0.2,
+                   y = area_av[treatment == "herbivory" & timepoint == 7],
+                   yend = area_av[treatment == "herbivory" & timepoint == 11]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) + 0.2, xend = transform_x(13) + 0.2,
+                   y = area_av[treatment == "herbivory" & timepoint == 11],
+                   yend = area_av[treatment == "herbivory" & timepoint == 13]),
+               color = "#D55E00") +
+  
+  geom_segment(aes(x = transform_x(13), xend = transform_x(59),
+                   y = area_av[mdata.plot$treatment == "control" & mdata.plot$timepoint == 13],
+                   yend = area_av[mdata.plot$treatment == "control" & mdata.plot$timepoint == 59]),
+               color = "#0072B2", linetype = "dashed") +
+  
+  geom_segment(aes(x = transform_x(13), xend = transform_x(59),
+                   y = area_av[mdata.plot$treatment == "herbivory" & mdata.plot$timepoint == 13],
+                   yend = area_av[mdata.plot$treatment == "herbivory" & mdata.plot$timepoint == 59]),
+               color = "#D55E00", linetype = "dashed") +
+  
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) - 0.2, xend = transform_x(61) - 0.2,
+                   y = area_av[treatment == "control" & timepoint == 59],
+                   yend = area_av[treatment == "control" & timepoint == 61]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) - 0.2, xend = transform_x(63) - 0.2,
+                   y = area_av[treatment == "control" & timepoint == 61],
+                   yend = area_av[treatment == "control" & timepoint == 63]),
+               color = "#0072B2") +
+  
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) + 0.2, xend = transform_x(61) + 0.2,
+                   y = area_av[treatment == "herbivory" & timepoint == 59],
+                   yend = area_av[treatment == "herbivory" & timepoint == 61]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) + 0.2, xend = transform_x(63) + 0.2,
+                   y = area_av[treatment == "herbivory" & timepoint == 61],
+                   yend = area_av[treatment == "herbivory" & timepoint == 63]),
+               color = "#D55E00") +
+  
+  labs(x = "Time (weeks)",
+       y = "Area per frond (mm²)")
+
+pxS2B
+```
+
+## Statistical analysis: area per frond
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+
+df1 <- df %>%
+  filter(timepoint %in% c(7, 11, 13))
+
+model <- lmer(area_fr ~ treatment + (1|timepoint) + (1|pond), data = df1)
+Anova(model,test="F")
+
+
+df2 <- df %>%
+  filter(timepoint %in% c(59, 61, 63))
+
+model <- lmer(area_fr ~ treatment + (1|timepoint) + (1|pond), data = df2)
+Anova(model,test="F")
+```
