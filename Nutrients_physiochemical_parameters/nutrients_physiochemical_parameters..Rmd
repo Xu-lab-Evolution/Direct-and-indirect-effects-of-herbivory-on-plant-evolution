@@ -1,0 +1,1477 @@
+---
+title: "nutrients and physiochemical parameters"
+author: "Sara Nouere"
+output: html_document
+---
+## Introduction
+This document analyzes total phosphurus concentration, other nutrient concentrations and physiochemical parameters. It includes:
+
+- Data loading and summarization,
+- Plotting TP over time,
+- Running linear mixed-effects models to assess treatment effects at early and late timepoints for nutrient concentrations and physiochemical parameters .
+
+  **Note:** This R Markdown document is used to generate **Figure 1D** in the manuscript, **Figure S5** and **Table S6** in the supplementary.
+
+### Figure 1B
+## Load required libraries
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+library("dplyr")
+library("ggplot2")
+library("plotrix")
+library("readxl")
+library("car")
+library("lme4")
+```
+
+## Load, summarize data and transformation function for custom X-Axis
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+df <- read.table("datanutrients.txt", sep = "\t", header = TRUE)
+
+mdata.plot <- df %>%
+  group_by(year, timepoint, treatment) %>%
+  summarise(TP_av = mean(TP),
+            TP_se = std.error(TP),
+            .groups = 'drop')
+
+# Transformation function
+transform_x <- function(x) {
+  ifelse(x < 18, x, 
+         ifelse(x >= 18 & x <= 48, 18 + (x - 18) / 15, 
+                18 + (48 - 18) / 15 + (x - 48) * 1))
+}   
+```
+
+## Precompute starting values 
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+control_start_TP <- mdata.plot$TP_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 0]
+control_end_TP <- mdata.plot$TP_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 7]
+herbivory_start_TP <- mdata.plot$TP_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 0]
+herbivory_end_TP <- mdata.plot$TP_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
+```
+
+## Plot: TP over time by treatment
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+px1B <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = TP_av, color = treatment)) +
+  theme_bw(base_size = 14) +
+  geom_pointrange(aes(ymin = TP_av - TP_se, ymax = TP_av + TP_se), position = position_dodge(0.9)) +
+  theme(axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"),
+        axis.text.y = element_text(color = "black"),
+        axis.title.y = element_text(color = "black"),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Legend", values = c("#0072B2", "#D55E00"),
+                     labels = c("Control", "Herbivory"),
+                     breaks = c("Control", "Herbivory")) +
+  scale_x_continuous(
+    breaks = transform_x(c(0, 3, 6, 9, 12, 15, 18, 48, 51, 54, 57, 60, 63)),
+    labels = c("0", "3", "6", "9", "12", "15", "18", "48", "51", "54", "57", "60", "63")
+  ) +
+  expand_limits(x = c(0, transform_x(65)), y = 0) +
+  geom_rect(aes(xmin = transform_x(18), xmax = transform_x(48), ymin = -Inf, ymax = Inf),
+            fill = "#B0B0B0", color = "transparent", inherit.aes = FALSE) +
+
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) - 0.2, xend = transform_x(5) - 0.2,
+                   y = TP_av[treatment == "Control" & timepoint == 0],
+                   yend = TP_av[treatment == "Control" & timepoint == 5]),
+               color = "#0072B2") +
+   geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) - 0.2, xend = transform_x(7) - 0.2,
+                   y = TP_av[treatment == "Control" & timepoint == 5],
+                   yend = TP_av[treatment == "Control" & timepoint == 7]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) - 0.2, xend = transform_x(11) - 0.2,
+                   y = TP_av[treatment == "Control" & timepoint == 7],
+                   yend = TP_av[treatment == "Control" & timepoint == 11]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) - 0.2, xend = transform_x(13) - 0.2,
+                   y = TP_av[treatment == "Control" & timepoint == 11],
+                   yend = TP_av[treatment == "Control" & timepoint == 13]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) + 0.2, xend = transform_x(5) + 0.2,
+                   y = TP_av[treatment == "Herbivory" & timepoint == 0],
+                   yend = TP_av[treatment == "Herbivory" & timepoint == 5]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) + 0.2, xend = transform_x(7) + 0.2,
+                   y = TP_av[treatment == "Herbivory" & timepoint == 5],
+                   yend = TP_av[treatment == "Herbivory" & timepoint == 7]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) + 0.2, xend = transform_x(11) + 0.2,
+                   y = TP_av[treatment == "Herbivory" & timepoint == 7],
+                   yend = TP_av[treatment == "Herbivory" & timepoint == 11]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) + 0.2, xend = transform_x(13) + 0.2,
+                   y = TP_av[treatment == "Herbivory" & timepoint == 11],
+                   yend = TP_av[treatment == "Herbivory" & timepoint == 13]),
+               color = "#D55E00") +
+  
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = TP_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 13],
+                   yend = TP_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 51]),
+               color = "#0072B2", linetype = "dashed") +
+  
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = TP_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 13],
+                   yend = TP_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 51]),
+               color = "#D55E00", linetype = "dashed") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) - 0.2, xend = transform_x(54) - 0.2,
+                   y = TP_av[treatment == "Control" & timepoint == 51],
+                   yend = TP_av[treatment == "Control" & timepoint == 54]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) - 0.2, xend = transform_x(59) - 0.2,
+                   y = TP_av[treatment == "Control" & timepoint == 54],
+                   yend = TP_av[treatment == "Control" & timepoint == 59]),
+               color = "#0072B2") +
+  
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) - 0.2, xend = transform_x(61) - 0.2,
+                   y = TP_av[treatment == "Control" & timepoint == 59],
+                   yend = TP_av[treatment == "Control" & timepoint == 61]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) - 0.2, xend = transform_x(63) - 0.2,
+                   y = TP_av[treatment == "Control" & timepoint == 61],
+                   yend = TP_av[treatment == "Control" & timepoint == 63]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) + 0.2, xend = transform_x(54) + 0.2,
+                   y = TP_av[treatment == "Herbivory" & timepoint == 51],
+                   yend = TP_av[treatment == "Herbivory" & timepoint == 54]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) + 0.2, xend = transform_x(59) + 0.2,
+                   y = TP_av[treatment == "Herbivory" & timepoint == 54],
+                   yend = TP_av[treatment == "Herbivory" & timepoint == 59]),
+               color = "#D55E00") +
+  
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) + 0.2, xend = transform_x(61) + 0.2,
+                   y = TP_av[treatment == "Herbivory" & timepoint == 59],
+                   yend = TP_av[treatment == "Herbivory" & timepoint == 61]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) + 0.2, xend = transform_x(63) + 0.2,
+                   y = TP_av[treatment == "Herbivory" & timepoint == 61],
+                   yend = TP_av[treatment == "Herbivory" & timepoint == 63]),
+               color = "#D55E00") +
+  
+  labs(x = "Time (weeks)",
+       y = "Total Phosphorus concentration")
+
+px1B
+```
+
+## Statistical analysis: first growing season (weeks 7–13)
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+# Filter first growing season data
+df1 <- df %>%
+  filter(timepoint %in% c(7, 11, 13))
+
+# Mixed-effects model for first growing season
+model <- lmer(TP ~ treatment + (1 | timepoint) + (1 | pond), data = df1)
+
+# Model summary and ANOVA
+Anova(model, test = "F")
+summary(model)
+```
+
+## Statistical analysis: second growing season (weeks 59–63)
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+# Filter second growing season data
+df2 <- df %>%
+  filter(timepoint %in% c(59, 61, 63))
+
+# Mixed-effects model for second growing season
+model <- lmer(TP ~ treatment + (1 | timepoint) + (1 | pond), data = df2)
+
+# Model summary and ANOVA
+Anova(model, test = "F")
+summary(model)
+```
+
+### Table S6
+## Statistical analysis: first growing season (weeks 7–13)
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+# PO4
+model <- lmer(PO4 ~ treatment + (1 | timepoint) + (1 | pond), data = df1)
+Anova(model, test = "F")
+summary(model)
+
+# NH4
+model <- lmer(NH4 ~ treatment + (1 | timepoint) + (1 | pond), data = df1)
+Anova(model, test = "F")
+summary(model)
+
+# TOC
+model <- lmer(TOC ~ treatment + (1 | timepoint) + (1 | pond), data = df1)
+Anova(model, test = "F")
+summary(model)
+
+# pH
+model <- lmer(pH ~ treatment + (1 | timepoint) + (1 | pond), data = df1)
+Anova(model, test = "F")
+summary(model)
+
+# Temperature
+model <- lmer(Temp ~ treatment + (1 | timepoint) + (1 | pond), data = df1)
+Anova(model, test = "F")
+summary(model)
+
+# O2
+model <- lmer(O2pourcentage ~ treatment + (1 | timepoint) + (1 | pond), data = df1)
+Anova(model, test = "F")
+summary(model)
+
+# Conductivity
+model <- lmer(Cond ~ treatment + (1 | timepoint) + (1 | pond), data = df1)
+Anova(model, test = "F")
+summary(model)
+
+# Light
+model <- lmer(light_weekly_mean ~ treatment + (1 | timepoint) + (1 | pond), data = df1)
+Anova(model, test = "F")
+summary(model)
+```
+
+## Statistical analysis: second growing season (weeks 59–63)
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+# PO4
+model <- lmer(PO4 ~ treatment + (1 | timepoint) + (1 | pond), data = df2)
+Anova(model, test = "F")
+summary(model)
+
+# NH4
+model <- lmer(NH4 ~ treatment + (1 | timepoint) + (1 | pond), data = df2)
+Anova(model, test = "F")
+summary(model)
+
+# TOC
+model <- lmer(TOC ~ treatment + (1 | timepoint) + (1 | pond), data = df2)
+Anova(model, test = "F")
+summary(model)
+
+# pH
+model <- lmer(pH ~ treatment + (1 | timepoint) + (1 | pond), data = df2)
+Anova(model, test = "F")
+summary(model)
+
+# Temperature
+model <- lmer(Temp ~ treatment + (1 | timepoint) + (1 | pond), data = df2)
+Anova(model, test = "F")
+summary(model)
+
+# O2
+model <- lmer(O2pourcentage ~ treatment + (1 | timepoint) + (1 | pond), data = df2)
+Anova(model, test = "F")
+summary(model)
+
+# Conductivity
+model <- lmer(Cond ~ treatment + (1 | timepoint) + (1 | pond), data = df2)
+Anova(model, test = "F")
+summary(model)
+
+# Light
+model <- lmer(light_weekly_mean ~ treatment + (1 | timepoint) + (1 | pond), data = df2)
+Anova(model, test = "F")
+summary(model)
+```
+
+## Figure S5A
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+mdata.plot <- df %>%
+  group_by(year, timepoint, treatment) %>%
+  summarise(PO4_av = mean(PO4, na.rm = TRUE),
+            PO4_se = std.error(PO4, na.rm = TRUE),
+            .groups = 'drop')
+
+# Transformation function
+transform_x <- function(x) {
+  ifelse(x < 18, x, 
+         ifelse(x >= 18 & x <= 48, 18 + (x - 18) / 15, 
+                18 + (48 - 18) / 15 + (x - 48) * 1))
+}   
+
+control_start_PO4    <- mdata.plot$PO4_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 0]
+control_end_PO4      <- mdata.plot$PO4_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 7]
+herbivory_start_PO4  <- mdata.plot$PO4_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 0]
+herbivory_end_PO4    <- mdata.plot$PO4_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
+
+pxS5A <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = PO4_av, color = treatment)) +
+  theme_bw(base_size = 12) +
+  geom_pointrange(aes(ymin = PO4_av - PO4_se, ymax = PO4_av + PO4_se), 
+                  position = position_dodge(0.9)) +
+  theme(axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"),
+        axis.text.y = element_text(color = "black"),
+        axis.title.y = element_text(color = "black"),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Legend", values = c("#0072B2", "#D55E00"),
+                     labels = c("Control", "Herbivory"),
+                     breaks = c("Control", "Herbivory")) +
+  scale_x_continuous(
+    breaks = transform_x(c(0, 3, 6, 9, 12, 15, 18, 48, 51, 54, 57, 60, 63)),
+    labels = c("0", "3", "6", "9", "12", "15", "18", "48", "51", "54", "57", "60", "63")
+  ) +
+  expand_limits(x = c(0, transform_x(65)), y = 0) +
+  geom_rect(aes(xmin = transform_x(18), xmax = transform_x(48), ymin = -Inf, ymax = Inf),
+            fill = "#B0B0B0", color = "transparent", inherit.aes = FALSE) +
+  
+  # --- Control segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) - 0.2, xend = transform_x(5) - 0.2,
+                   y = PO4_av[treatment == "Control" & timepoint == 0],
+                   yend = PO4_av[treatment == "Control" & timepoint == 5]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) - 0.2, xend = transform_x(7) - 0.2,
+                   y = PO4_av[treatment == "Control" & timepoint == 5],
+                   yend = PO4_av[treatment == "Control" & timepoint == 7]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) - 0.2, xend = transform_x(11) - 0.2,
+                   y = PO4_av[treatment == "Control" & timepoint == 7],
+                   yend = PO4_av[treatment == "Control" & timepoint == 11]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) - 0.2, xend = transform_x(13) - 0.2,
+                   y = PO4_av[treatment == "Control" & timepoint == 11],
+                   yend = PO4_av[treatment == "Control" & timepoint == 13]),
+               color = "#0072B2") +
+  
+  # --- Herbivory segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) + 0.2, xend = transform_x(5) + 0.2,
+                   y = PO4_av[treatment == "Herbivory" & timepoint == 0],
+                   yend = PO4_av[treatment == "Herbivory" & timepoint == 5]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) + 0.2, xend = transform_x(7) + 0.2,
+                   y = PO4_av[treatment == "Herbivory" & timepoint == 5],
+                   yend = PO4_av[treatment == "Herbivory" & timepoint == 7]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) + 0.2, xend = transform_x(11) + 0.2,
+                   y = PO4_av[treatment == "Herbivory" & timepoint == 7],
+                   yend = PO4_av[treatment == "Herbivory" & timepoint == 11]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) + 0.2, xend = transform_x(13) + 0.2,
+                   y = PO4_av[treatment == "Herbivory" & timepoint == 11],
+                   yend = PO4_av[treatment == "Herbivory" & timepoint == 13]),
+               color = "#D55E00") +
+  
+  # --- Long dashed segments ---
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = PO4_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 13],
+                   yend = PO4_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 51]),
+               color = "#0072B2", linetype = "dashed") +
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = PO4_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 13],
+                   yend = PO4_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 51]),
+               color = "#D55E00", linetype = "dashed") +
+  
+  # --- Control later segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) - 0.2, xend = transform_x(54) - 0.2,
+                   y = PO4_av[treatment == "Control" & timepoint == 51],
+                   yend = PO4_av[treatment == "Control" & timepoint == 54]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) - 0.2, xend = transform_x(59) - 0.2,
+                   y = PO4_av[treatment == "Control" & timepoint == 54],
+                   yend = PO4_av[treatment == "Control" & timepoint == 59]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) - 0.2, xend = transform_x(61) - 0.2,
+                   y = PO4_av[treatment == "Control" & timepoint == 59],
+                   yend = PO4_av[treatment == "Control" & timepoint == 61]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) - 0.2, xend = transform_x(63) - 0.2,
+                   y = PO4_av[treatment == "Control" & timepoint == 61],
+                   yend = PO4_av[treatment == "Control" & timepoint == 63]),
+               color = "#0072B2") +
+  
+  # --- Herbivory later segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) + 0.2, xend = transform_x(54) + 0.2,
+                   y = PO4_av[treatment == "Herbivory" & timepoint == 51],
+                   yend = PO4_av[treatment == "Herbivory" & timepoint == 54]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) + 0.2, xend = transform_x(59) + 0.2,
+                   y = PO4_av[treatment == "Herbivory" & timepoint == 54],
+                   yend = PO4_av[treatment == "Herbivory" & timepoint == 59]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) + 0.2, xend = transform_x(61) + 0.2,
+                   y = PO4_av[treatment == "Herbivory" & timepoint == 59],
+                   yend = PO4_av[treatment == "Herbivory" & timepoint == 61]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) + 0.2, xend = transform_x(63) + 0.2,
+                   y = PO4_av[treatment == "Herbivory" & timepoint == 61],
+                   yend = PO4_av[treatment == "Herbivory" & timepoint == 63]),
+               color = "#D55E00") +
+  
+  labs(x = NULL,
+       y = "PO4 concentration")
+
+pxS5A
+```
+
+## Figure S5B
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+mdata.plot <- df %>%
+  group_by(year, timepoint, treatment) %>%
+  summarise(NH4_av = mean(NH4, na.rm = TRUE),
+            NH4_se = std.error(NH4, na.rm = TRUE),
+            .groups = 'drop')
+
+# Transformation function
+transform_x <- function(x) {
+  ifelse(x < 18, x, 
+         ifelse(x >= 18 & x <= 48, 18 + (x - 18) / 15, 
+                18 + (48 - 18) / 15 + (x - 48) * 1))
+}   
+
+control_start_NH4    <- mdata.plot$NH4_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 0]
+control_end_NH4      <- mdata.plot$NH4_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 7]
+herbivory_start_NH4  <- mdata.plot$NH4_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 0]
+herbivory_end_NH4    <- mdata.plot$NH4_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
+
+pxS5B <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = NH4_av, color = treatment)) +
+  theme_bw(base_size = 12) +
+  geom_pointrange(aes(ymin = NH4_av - NH4_se, ymax = NH4_av + NH4_se), 
+                  position = position_dodge(0.9)) +
+  theme(axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"),
+        axis.text.y = element_text(color = "black"),
+        axis.title.y = element_text(color = "black"),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Legend", values = c("#0072B2", "#D55E00"),
+                     labels = c("Control", "Herbivory"),
+                     breaks = c("Control", "Herbivory")) +
+  scale_x_continuous(
+    breaks = transform_x(c(0, 3, 6, 9, 12, 15, 18, 48, 51, 54, 57, 60, 63)),
+    labels = c("0", "3", "6", "9", "12", "15", "18", "48", "51", "54", "57", "60", "63")
+  ) +
+  expand_limits(x = c(0, transform_x(65)), y = 0) +
+  geom_rect(aes(xmin = transform_x(18), xmax = transform_x(48), ymin = -Inf, ymax = Inf),
+            fill = "#B0B0B0", color = "transparent", inherit.aes = FALSE) +
+  
+  # --- Control segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) - 0.2, xend = transform_x(5) - 0.2,
+                   y = NH4_av[treatment == "Control" & timepoint == 0],
+                   yend = NH4_av[treatment == "Control" & timepoint == 5]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) - 0.2, xend = transform_x(7) - 0.2,
+                   y = NH4_av[treatment == "Control" & timepoint == 5],
+                   yend = NH4_av[treatment == "Control" & timepoint == 7]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) - 0.2, xend = transform_x(11) - 0.2,
+                   y = NH4_av[treatment == "Control" & timepoint == 7],
+                   yend = NH4_av[treatment == "Control" & timepoint == 11]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) - 0.2, xend = transform_x(13) - 0.2,
+                   y = NH4_av[treatment == "Control" & timepoint == 11],
+                   yend = NH4_av[treatment == "Control" & timepoint == 13]),
+               color = "#0072B2") +
+  
+  # --- Herbivory segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) + 0.2, xend = transform_x(5) + 0.2,
+                   y = NH4_av[treatment == "Herbivory" & timepoint == 0],
+                   yend = NH4_av[treatment == "Herbivory" & timepoint == 5]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) + 0.2, xend = transform_x(7) + 0.2,
+                   y = NH4_av[treatment == "Herbivory" & timepoint == 5],
+                   yend = NH4_av[treatment == "Herbivory" & timepoint == 7]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) + 0.2, xend = transform_x(11) + 0.2,
+                   y = NH4_av[treatment == "Herbivory" & timepoint == 7],
+                   yend = NH4_av[treatment == "Herbivory" & timepoint == 11]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) + 0.2, xend = transform_x(13) + 0.2,
+                   y = NH4_av[treatment == "Herbivory" & timepoint == 11],
+                   yend = NH4_av[treatment == "Herbivory" & timepoint == 13]),
+               color = "#D55E00") +
+  
+  # --- Long dashed segments ---
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = NH4_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 13],
+                   yend = NH4_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 51]),
+               color = "#0072B2", linetype = "dashed") +
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = NH4_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 13],
+                   yend = NH4_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 51]),
+               color = "#D55E00", linetype = "dashed") +
+  
+  # --- Control later segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) - 0.2, xend = transform_x(54) - 0.2,
+                   y = NH4_av[treatment == "Control" & timepoint == 51],
+                   yend = NH4_av[treatment == "Control" & timepoint == 54]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) - 0.2, xend = transform_x(59) - 0.2,
+                   y = NH4_av[treatment == "Control" & timepoint == 54],
+                   yend = NH4_av[treatment == "Control" & timepoint == 59]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) - 0.2, xend = transform_x(61) - 0.2,
+                   y = NH4_av[treatment == "Control" & timepoint == 59],
+                   yend = NH4_av[treatment == "Control" & timepoint == 61]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) - 0.2, xend = transform_x(63) - 0.2,
+                   y = NH4_av[treatment == "Control" & timepoint == 61],
+                   yend = NH4_av[treatment == "Control" & timepoint == 63]),
+               color = "#0072B2") +
+  
+  # --- Herbivory later segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) + 0.2, xend = transform_x(54) + 0.2,
+                   y = NH4_av[treatment == "Herbivory" & timepoint == 51],
+                   yend = NH4_av[treatment == "Herbivory" & timepoint == 54]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) + 0.2, xend = transform_x(59) + 0.2,
+                   y = NH4_av[treatment == "Herbivory" & timepoint == 54],
+                   yend = NH4_av[treatment == "Herbivory" & timepoint == 59]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) + 0.2, xend = transform_x(61) + 0.2,
+                   y = NH4_av[treatment == "Herbivory" & timepoint == 59],
+                   yend = NH4_av[treatment == "Herbivory" & timepoint == 61]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) + 0.2, xend = transform_x(63) + 0.2,
+                   y = NH4_av[treatment == "Herbivory" & timepoint == 61],
+                   yend = NH4_av[treatment == "Herbivory" & timepoint == 63]),
+               color = "#D55E00") +
+  
+  labs(x = NULL, y = "NH4 concentration")
+
+pxS5B
+```
+
+## Figure S5C
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+mdata.plot <- df %>%
+  group_by(year, timepoint, treatment) %>%
+  summarise(TOC_av = mean(TOC, na.rm = TRUE),
+            TOC_se = std.error(TOC, na.rm = TRUE),
+            .groups = 'drop')
+
+# Transformation function
+transform_x <- function(x) {
+  ifelse(x < 18, x, 
+         ifelse(x >= 18 & x <= 48, 18 + (x - 18) / 15, 
+                18 + (48 - 18) / 15 + (x - 48) * 1))
+}   
+
+control_start_TOC    <- mdata.plot$TOC_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 0]
+control_end_TOC      <- mdata.plot$TOC_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 7]
+herbivory_start_TOC  <- mdata.plot$TOC_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 0]
+herbivory_end_TOC    <- mdata.plot$TOC_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
+
+## --- Plot TOC ---
+pxS5C <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = TOC_av, color = treatment)) +
+  theme_bw(base_size = 12) +
+  geom_pointrange(aes(ymin = TOC_av - TOC_se, ymax = TOC_av + TOC_se), 
+                  position = position_dodge(0.9)) +
+  theme(axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"),
+        axis.text.y = element_text(color = "black"),
+        axis.title.y = element_text(color = "black"),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Legend", values = c("#0072B2", "#D55E00"),
+                     labels = c("Control", "Herbivory"),
+                     breaks = c("Control", "Herbivory")) +
+  scale_x_continuous(
+    breaks = transform_x(c(0, 3, 6, 9, 12, 15, 18, 48, 51, 54, 57, 60, 63)),
+    labels = c("0", "3", "6", "9", "12", "15", "18", "48", "51", "54", "57", "60", "63")
+  ) +
+  expand_limits(x = c(0, transform_x(65)), y = 0) +
+  geom_rect(aes(xmin = transform_x(18), xmax = transform_x(48), ymin = -Inf, ymax = Inf),
+            fill = "#B0B0B0", color = "transparent", inherit.aes = FALSE) +
+  
+  # --- Control early segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) - 0.2, xend = transform_x(5) - 0.2,
+                   y = TOC_av[treatment == "Control" & timepoint == 0],
+                   yend = TOC_av[treatment == "Control" & timepoint == 5]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) - 0.2, xend = transform_x(7) - 0.2,
+                   y = TOC_av[treatment == "Control" & timepoint == 5],
+                   yend = TOC_av[treatment == "Control" & timepoint == 7]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) - 0.2, xend = transform_x(11) - 0.2,
+                   y = TOC_av[treatment == "Control" & timepoint == 7],
+                   yend = TOC_av[treatment == "Control" & timepoint == 11]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) - 0.2, xend = transform_x(13) - 0.2,
+                   y = TOC_av[treatment == "Control" & timepoint == 11],
+                   yend = TOC_av[treatment == "Control" & timepoint == 13]),
+               color = "#0072B2") +
+  
+  # --- Herbivory early segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) + 0.2, xend = transform_x(5) + 0.2,
+                   y = TOC_av[treatment == "Herbivory" & timepoint == 0],
+                   yend = TOC_av[treatment == "Herbivory" & timepoint == 5]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) + 0.2, xend = transform_x(7) + 0.2,
+                   y = TOC_av[treatment == "Herbivory" & timepoint == 5],
+                   yend = TOC_av[treatment == "Herbivory" & timepoint == 7]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) + 0.2, xend = transform_x(11) + 0.2,
+                   y = TOC_av[treatment == "Herbivory" & timepoint == 7],
+                   yend = TOC_av[treatment == "Herbivory" & timepoint == 11]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) + 0.2, xend = transform_x(13) + 0.2,
+                   y = TOC_av[treatment == "Herbivory" & timepoint == 11],
+                   yend = TOC_av[treatment == "Herbivory" & timepoint == 13]),
+               color = "#D55E00") +
+  
+  # --- Dashed gap segments (13 → 51) ---
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = TOC_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 13],
+                   yend = TOC_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 51]),
+               color = "#0072B2", linetype = "dashed") +
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = TOC_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 13],
+                   yend = TOC_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 51]),
+               color = "#D55E00", linetype = "dashed") +
+  
+  # --- Control later segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) - 0.2, xend = transform_x(54) - 0.2,
+                   y = TOC_av[treatment == "Control" & timepoint == 51],
+                   yend = TOC_av[treatment == "Control" & timepoint == 54]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) - 0.2, xend = transform_x(59) - 0.2,
+                   y = TOC_av[treatment == "Control" & timepoint == 54],
+                   yend = TOC_av[treatment == "Control" & timepoint == 59]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) - 0.2, xend = transform_x(61) - 0.2,
+                   y = TOC_av[treatment == "Control" & timepoint == 59],
+                   yend = TOC_av[treatment == "Control" & timepoint == 61]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) - 0.2, xend = transform_x(63) - 0.2,
+                   y = TOC_av[treatment == "Control" & timepoint == 61],
+                   yend = TOC_av[treatment == "Control" & timepoint == 63]),
+               color = "#0072B2") +
+  
+  # --- Herbivory later segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) + 0.2, xend = transform_x(54) + 0.2,
+                   y = TOC_av[treatment == "Herbivory" & timepoint == 51],
+                   yend = TOC_av[treatment == "Herbivory" & timepoint == 54]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) + 0.2, xend = transform_x(59) + 0.2,
+                   y = TOC_av[treatment == "Herbivory" & timepoint == 54],
+                   yend = TOC_av[treatment == "Herbivory" & timepoint == 59]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) + 0.2, xend = transform_x(61) + 0.2,
+                   y = TOC_av[treatment == "Herbivory" & timepoint == 59],
+                   yend = TOC_av[treatment == "Herbivory" & timepoint == 61]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) + 0.2, xend = transform_x(63) + 0.2,
+                   y = TOC_av[treatment == "Herbivory" & timepoint == 61],
+                   yend = TOC_av[treatment == "Herbivory" & timepoint == 63]),
+               color = "#D55E00") +
+  
+  labs(x = NULL, y = "TOC concentration")
+
+pxS5C
+```
+
+## Figure S5D
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+
+mdata.plot <- df %>%
+  group_by(year, timepoint, treatment) %>%
+  summarise(pH_av = mean(pH, na.rm = TRUE),
+            pH_se = std.error(pH, na.rm = TRUE),
+            .groups = 'drop')
+
+# Transformation function
+transform_x <- function(x) {
+  ifelse(x < 18, x, 
+         ifelse(x >= 18 & x <= 48, 18 + (x - 18) / 15, 
+                18 + (48 - 18) / 15 + (x - 48) * 1))
+}   
+
+control_start_pH    <- mdata.plot$pH_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 0]
+control_end_pH      <- mdata.plot$pH_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 7]
+herbivory_start_pH  <- mdata.plot$pH_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 0]
+herbivory_end_pH    <- mdata.plot$pH_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
+
+## --- Plot pH ---
+pxS5D <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = pH_av, color = treatment)) +
+  theme_bw(base_size = 12) +
+  geom_pointrange(aes(ymin = pH_av - pH_se, ymax = pH_av + pH_se), 
+                  position = position_dodge(0.9)) +
+  theme(axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"),
+        axis.text.y = element_text(color = "black"),
+        axis.title.y = element_text(color = "black"),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Legend", values = c("#0072B2", "#D55E00"),
+                     labels = c("Control", "Herbivory"),
+                     breaks = c("Control", "Herbivory")) +
+  scale_x_continuous(
+    breaks = transform_x(c(0, 3, 6, 9, 12, 15, 18, 48, 51, 54, 57, 60, 63)),
+    labels = c("0", "3", "6", "9", "12", "15", "18", "48", "51", "54", "57", "60", "63")
+  ) +
+  expand_limits(x = c(0, transform_x(65))) +
+  geom_rect(aes(xmin = transform_x(18), xmax = transform_x(48), ymin = -Inf, ymax = Inf),
+            fill = "#B0B0B0", color = "transparent", inherit.aes = FALSE) +
+  
+  # --- Control early segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) - 0.2, xend = transform_x(5) - 0.2,
+                   y = pH_av[treatment == "Control" & timepoint == 0],
+                   yend = pH_av[treatment == "Control" & timepoint == 5]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) - 0.2, xend = transform_x(7) - 0.2,
+                   y = pH_av[treatment == "Control" & timepoint == 5],
+                   yend = pH_av[treatment == "Control" & timepoint == 7]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) - 0.2, xend = transform_x(11) - 0.2,
+                   y = pH_av[treatment == "Control" & timepoint == 7],
+                   yend = pH_av[treatment == "Control" & timepoint == 11]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) - 0.2, xend = transform_x(13) - 0.2,
+                   y = pH_av[treatment == "Control" & timepoint == 11],
+                   yend = pH_av[treatment == "Control" & timepoint == 13]),
+               color = "#0072B2") +
+  
+  # --- Herbivory early segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) + 0.2, xend = transform_x(5) + 0.2,
+                   y = pH_av[treatment == "Herbivory" & timepoint == 0],
+                   yend = pH_av[treatment == "Herbivory" & timepoint == 5]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) + 0.2, xend = transform_x(7) + 0.2,
+                   y = pH_av[treatment == "Herbivory" & timepoint == 5],
+                   yend = pH_av[treatment == "Herbivory" & timepoint == 7]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) + 0.2, xend = transform_x(11) + 0.2,
+                   y = pH_av[treatment == "Herbivory" & timepoint == 7],
+                   yend = pH_av[treatment == "Herbivory" & timepoint == 11]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) + 0.2, xend = transform_x(13) + 0.2,
+                   y = pH_av[treatment == "Herbivory" & timepoint == 11],
+                   yend = pH_av[treatment == "Herbivory" & timepoint == 13]),
+               color = "#D55E00") +
+  
+  # --- Dashed gap segments (13 → 51) ---
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = pH_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 13],
+                   yend = pH_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 51]),
+               color = "#0072B2", linetype = "dashed") +
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = pH_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 13],
+                   yend = pH_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 51]),
+               color = "#D55E00", linetype = "dashed") +
+  
+  # --- Control later segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) - 0.2, xend = transform_x(54) - 0.2,
+                   y = pH_av[treatment == "Control" & timepoint == 51],
+                   yend = pH_av[treatment == "Control" & timepoint == 54]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) - 0.2, xend = transform_x(59) - 0.2,
+                   y = pH_av[treatment == "Control" & timepoint == 54],
+                   yend = pH_av[treatment == "Control" & timepoint == 59]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) - 0.2, xend = transform_x(61) - 0.2,
+                   y = pH_av[treatment == "Control" & timepoint == 59],
+                   yend = pH_av[treatment == "Control" & timepoint == 61]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) - 0.2, xend = transform_x(63) - 0.2,
+                   y = pH_av[treatment == "Control" & timepoint == 61],
+                   yend = pH_av[treatment == "Control" & timepoint == 63]),
+               color = "#0072B2") +
+  
+  # --- Herbivory later segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) + 0.2, xend = transform_x(54) + 0.2,
+                   y = pH_av[treatment == "Herbivory" & timepoint == 51],
+                   yend = pH_av[treatment == "Herbivory" & timepoint == 54]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) + 0.2, xend = transform_x(59) + 0.2,
+                   y = pH_av[treatment == "Herbivory" & timepoint == 54],
+                   yend = pH_av[treatment == "Herbivory" & timepoint == 59]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) + 0.2, xend = transform_x(61) + 0.2,
+                   y = pH_av[treatment == "Herbivory" & timepoint == 59],
+                   yend = pH_av[treatment == "Herbivory" & timepoint == 61]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) + 0.2, xend = transform_x(63) + 0.2,
+                   y = pH_av[treatment == "Herbivory" & timepoint == 61],
+                   yend = pH_av[treatment == "Herbivory" & timepoint == 63]),
+               color = "#D55E00") +
+  
+  labs(x = NULL, y = "pH")
+
+pxS5D
+```
+
+## Figure S5E
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+mdata.plot <- df %>%
+  group_by(year, timepoint, treatment) %>%
+  summarise(Cond_av = mean(Cond, na.rm = TRUE),
+            Cond_se = std.error(Cond, na.rm = TRUE),
+            .groups = 'drop')
+
+# Transformation function
+transform_x <- function(x) {
+  ifelse(x < 18, x, 
+         ifelse(x >= 18 & x <= 48, 18 + (x - 18) / 15, 
+                18 + (48 - 18) / 15 + (x - 48) * 1))
+}   
+
+control_start_Cond <- mdata.plot$Cond_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 0]
+control_end_Cond <- mdata.plot$Cond_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 7]
+herbivory_start_Cond <- mdata.plot$Cond_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 0]
+herbivory_end_Cond <- mdata.plot$Cond_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
+
+# --- Conductivity plot ---
+
+pxS5E <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = Cond_av, color = treatment)) +
+  theme_bw(base_size = 12) +
+  geom_pointrange(aes(ymin = Cond_av - Cond_se, ymax = Cond_av + Cond_se),
+                  position = position_dodge(0.9)) +
+  theme(axis.text.y = element_text(color = "black"),
+        axis.title.y = element_text(color = "black"),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Legend", values = c("#0072B2", "#D55E00"),
+                     labels = c("Control", "Herbivory"),
+                     breaks = c("Control", "Herbivory")) +
+  scale_x_continuous(
+    breaks = transform_x(c(0, 3, 6, 9, 12, 15, 18, 48, 51, 54, 57, 60, 63)),
+    labels = c("0", "3", "6", "9", "12", "15", "18", "48", "51", "54", "57", "60", "63")
+  ) +
+  expand_limits(x = c(0, transform_x(65)), y = 0) +
+  geom_rect(aes(xmin = transform_x(18), xmax = transform_x(48), ymin = -Inf, ymax = Inf),
+            fill = "#B0B0B0", color = "transparent", inherit.aes = FALSE) +
+  
+  # --- Control early segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) - 0.2, xend = transform_x(5) - 0.2,
+                   y = Cond_av[treatment == "Control" & timepoint == 0],
+                   yend = Cond_av[treatment == "Control" & timepoint == 5]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) - 0.2, xend = transform_x(7) - 0.2,
+                   y = Cond_av[treatment == "Control" & timepoint == 5],
+                   yend = Cond_av[treatment == "Control" & timepoint == 7]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) - 0.2, xend = transform_x(11) - 0.2,
+                   y = Cond_av[treatment == "Control" & timepoint == 7],
+                   yend = Cond_av[treatment == "Control" & timepoint == 11]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) - 0.2, xend = transform_x(13) - 0.2,
+                   y = Cond_av[treatment == "Control" & timepoint == 11],
+                   yend = Cond_av[treatment == "Control" & timepoint == 13]),
+               color = "#0072B2") +
+  
+  # --- Herbivory early segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) + 0.2, xend = transform_x(5) + 0.2,
+                   y = Cond_av[treatment == "Herbivory" & timepoint == 0],
+                   yend = Cond_av[treatment == "Herbivory" & timepoint == 5]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) + 0.2, xend = transform_x(7) + 0.2,
+                   y = Cond_av[treatment == "Herbivory" & timepoint == 5],
+                   yend = Cond_av[treatment == "Herbivory" & timepoint == 7]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) + 0.2, xend = transform_x(11) + 0.2,
+                   y = Cond_av[treatment == "Herbivory" & timepoint == 7],
+                   yend = Cond_av[treatment == "Herbivory" & timepoint == 11]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) + 0.2, xend = transform_x(13) + 0.2,
+                   y = Cond_av[treatment == "Herbivory" & timepoint == 11],
+                   yend = Cond_av[treatment == "Herbivory" & timepoint == 13]),
+               color = "#D55E00") +
+  
+  # --- Dashed mid segments ---
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = Cond_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 13],
+                   yend = Cond_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 51]),
+               color = "#0072B2", linetype = "dashed") +
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = Cond_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 13],
+                   yend = Cond_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 51]),
+               color = "#D55E00", linetype = "dashed") +
+  
+  # --- Later Control segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) - 0.2, xend = transform_x(54) - 0.2,
+                   y = Cond_av[treatment == "Control" & timepoint == 51],
+                   yend = Cond_av[treatment == "Control" & timepoint == 54]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) - 0.2, xend = transform_x(59) - 0.2,
+                   y = Cond_av[treatment == "Control" & timepoint == 54],
+                   yend = Cond_av[treatment == "Control" & timepoint == 59]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) - 0.2, xend = transform_x(61) - 0.2,
+                   y = Cond_av[treatment == "Control" & timepoint == 59],
+                   yend = Cond_av[treatment == "Control" & timepoint == 61]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) - 0.2, xend = transform_x(63) - 0.2,
+                   y = Cond_av[treatment == "Control" & timepoint == 61],
+                   yend = Cond_av[treatment == "Control" & timepoint == 63]),
+               color = "#0072B2") +
+  
+  # --- Later Herbivory segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) + 0.2, xend = transform_x(54) + 0.2,
+                   y = Cond_av[treatment == "Herbivory" & timepoint == 51],
+                   yend = Cond_av[treatment == "Herbivory" & timepoint == 54]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) + 0.2, xend = transform_x(59) + 0.2,
+                   y = Cond_av[treatment == "Herbivory" & timepoint == 54],
+                   yend = Cond_av[treatment == "Herbivory" & timepoint == 59]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) + 0.2, xend = transform_x(61) + 0.2,
+                   y = Cond_av[treatment == "Herbivory" & timepoint == 59],
+                   yend = Cond_av[treatment == "Herbivory" & timepoint == 61]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) + 0.2, xend = transform_x(63) + 0.2,
+                   y = Cond_av[treatment == "Herbivory" & timepoint == 61],
+                   yend = Cond_av[treatment == "Herbivory" & timepoint == 63]),
+               color = "#D55E00") +
+  
+  labs(x = NULL, y = "Conductivity (µS/cm)")
+
+pxS5E
+```
+
+## Figure S5F
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+
+mdata.plot <- df %>%
+  group_by(year, timepoint, treatment) %>%
+  summarise(O2_av = mean(O2pourcentage, na.rm = TRUE),
+            O2_se = std.error(O2pourcentage, na.rm = TRUE),
+            .groups = 'drop')
+
+# Transformation function
+transform_x <- function(x) {
+  ifelse(x < 18, x, 
+         ifelse(x >= 18 & x <= 48, 18 + (x - 18) / 15, 
+                18 + (48 - 18) / 15 + (x - 48) * 1))
+}   
+
+control_start_O2 <- mdata.plot$O2_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 0]
+control_end_O2 <- mdata.plot$O2_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 7]
+herbivory_start_O2 <- mdata.plot$O2_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 0]
+herbivory_end_O2 <- mdata.plot$O2_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
+
+# --- O2 percentage plot ---
+
+pxS5F <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = O2_av, color = treatment)) +
+  theme_bw(base_size = 12) +
+  geom_pointrange(aes(ymin = O2_av - O2_se, ymax = O2_av + O2_se),
+                  position = position_dodge(0.9)) +
+  theme(axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"),
+        axis.text.y = element_text(color = "black"),
+        axis.title.y = element_text(color = "black"),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Legend", values = c("#0072B2", "#D55E00"),
+                     labels = c("Control", "Herbivory"),
+                     breaks = c("Control", "Herbivory")) +
+  scale_x_continuous(
+    breaks = transform_x(c(0, 3, 6, 9, 12, 15, 18, 48, 51, 54, 57, 60, 63)),
+    labels = c("0", "3", "6", "9", "12", "15", "18", "48", "51", "54", "57", "60", "63")
+  ) +
+  expand_limits(x = c(0, transform_x(65)), y = 0) +
+  geom_rect(aes(xmin = transform_x(18), xmax = transform_x(48), ymin = -Inf, ymax = Inf),
+            fill = "#B0B0B0", color = "transparent", inherit.aes = FALSE) +
+  
+  # --- Control segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) - 0.2, xend = transform_x(5) - 0.2,
+                   y = O2_av[treatment == "Control" & timepoint == 0],
+                   yend = O2_av[treatment == "Control" & timepoint == 5]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) - 0.2, xend = transform_x(7) - 0.2,
+                   y = O2_av[treatment == "Control" & timepoint == 5],
+                   yend = O2_av[treatment == "Control" & timepoint == 7]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) - 0.2, xend = transform_x(11) - 0.2,
+                   y = O2_av[treatment == "Control" & timepoint == 7],
+                   yend = O2_av[treatment == "Control" & timepoint == 11]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) - 0.2, xend = transform_x(13) - 0.2,
+                   y = O2_av[treatment == "Control" & timepoint == 11],
+                   yend = O2_av[treatment == "Control" & timepoint == 13]),
+               color = "#0072B2") +
+  
+  # --- Herbivory segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) + 0.2, xend = transform_x(5) + 0.2,
+                   y = O2_av[treatment == "Herbivory" & timepoint == 0],
+                   yend = O2_av[treatment == "Herbivory" & timepoint == 5]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) + 0.2, xend = transform_x(7) + 0.2,
+                   y = O2_av[treatment == "Herbivory" & timepoint == 5],
+                   yend = O2_av[treatment == "Herbivory" & timepoint == 7]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) + 0.2, xend = transform_x(11) + 0.2,
+                   y = O2_av[treatment == "Herbivory" & timepoint == 7],
+                   yend = O2_av[treatment == "Herbivory" & timepoint == 11]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) + 0.2, xend = transform_x(13) + 0.2,
+                   y = O2_av[treatment == "Herbivory" & timepoint == 11],
+                   yend = O2_av[treatment == "Herbivory" & timepoint == 13]),
+               color = "#D55E00") +
+  
+  # --- Dashed lines Control & Herbivory ---
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = O2_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 13],
+                   yend = O2_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 51]),
+               color = "#0072B2", linetype = "dashed") +
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = O2_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 13],
+                   yend = O2_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 51]),
+               color = "#D55E00", linetype = "dashed") +
+  
+  # --- Later Control segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) - 0.2, xend = transform_x(54) - 0.2,
+                   y = O2_av[treatment == "Control" & timepoint == 51],
+                   yend = O2_av[treatment == "Control" & timepoint == 54]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) - 0.2, xend = transform_x(59) - 0.2,
+                   y = O2_av[treatment == "Control" & timepoint == 54],
+                   yend = O2_av[treatment == "Control" & timepoint == 59]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) - 0.2, xend = transform_x(61) - 0.2,
+                   y = O2_av[treatment == "Control" & timepoint == 59],
+                   yend = O2_av[treatment == "Control" & timepoint == 61]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) - 0.2, xend = transform_x(63) - 0.2,
+                   y = O2_av[treatment == "Control" & timepoint == 61],
+                   yend = O2_av[treatment == "Control" & timepoint == 63]),
+               color = "#0072B2") +
+  
+  # --- Later Herbivory segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) + 0.2, xend = transform_x(54) + 0.2,
+                   y = O2_av[treatment == "Herbivory" & timepoint == 51],
+                   yend = O2_av[treatment == "Herbivory" & timepoint == 54]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) + 0.2, xend = transform_x(59) + 0.2,
+                   y = O2_av[treatment == "Herbivory" & timepoint == 54],
+                   yend = O2_av[treatment == "Herbivory" & timepoint == 59]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) + 0.2, xend = transform_x(61) + 0.2,
+                   y = O2_av[treatment == "Herbivory" & timepoint == 59],
+                   yend = O2_av[treatment == "Herbivory" & timepoint == 61]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) + 0.2, xend = transform_x(63) + 0.2,
+                   y = O2_av[treatment == "Herbivory" & timepoint == 61],
+                   yend = O2_av[treatment == "Herbivory" & timepoint == 63]),
+               color = "#D55E00") +
+  
+  labs(x = NULL, y = "O2 (%)")
+
+pxS5F
+```
+
+## Figure S5G
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+
+mdata.plot <- df %>%
+  group_by(year, timepoint, treatment) %>%
+  summarise(Temp_av = mean(Temp, na.rm = TRUE),
+            Temp_se = std.error(Temp, na.rm = TRUE),
+            .groups = 'drop')
+
+# Transformation function
+transform_x <- function(x) {
+  ifelse(x < 18, x, 
+         ifelse(x >= 18 & x <= 48, 18 + (x - 18) / 15, 
+                18 + (48 - 18) / 15 + (x - 48) * 1))
+}   
+
+control_start_Temp    <- mdata.plot$Temp_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 0]
+control_end_Temp      <- mdata.plot$Temp_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 7]
+herbivory_start_Temp  <- mdata.plot$Temp_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 0]
+herbivory_end_Temp   <- mdata.plot$Temp_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
+
+# --- Temperature plot  ---
+
+pxS5G <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = Temp_av, color = treatment)) +
+  theme_bw(base_size = 12) +
+  geom_pointrange(aes(ymin = Temp_av - Temp_se, ymax = Temp_av + Temp_se),
+                  position = position_dodge(0.9)) +
+  theme(axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"),
+        axis.text.y = element_text(color = "black"),
+        axis.title.y = element_text(color = "black"),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Legend", values = c("#0072B2", "#D55E00"),
+                     labels = c("Control", "Herbivory"),
+                     breaks = c("Control", "Herbivory")) +
+  scale_x_continuous(
+    breaks = transform_x(c(0, 3, 6, 9, 12, 15, 18, 48, 51, 54, 57, 60, 63)),
+    labels = c("0", "3", "6", "9", "12", "15", "18", "48", "51", "54", "57", "60", "63")
+  ) +
+  expand_limits(x = c(0, transform_x(65)), y = 0) +
+  geom_rect(aes(xmin = transform_x(18), xmax = transform_x(48), ymin = -Inf, ymax = Inf),
+            fill = "#B0B0B0", color = "transparent", inherit.aes = FALSE) +
+  
+  # --- Control segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) - 0.2, xend = transform_x(5) - 0.2,
+                   y = Temp_av[treatment == "Control" & timepoint == 0],
+                   yend = Temp_av[treatment == "Control" & timepoint == 5]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) - 0.2, xend = transform_x(7) - 0.2,
+                   y = Temp_av[treatment == "Control" & timepoint == 5],
+                   yend = Temp_av[treatment == "Control" & timepoint == 7]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) - 0.2, xend = transform_x(11) - 0.2,
+                   y = Temp_av[treatment == "Control" & timepoint == 7],
+                   yend = Temp_av[treatment == "Control" & timepoint == 11]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) - 0.2, xend = transform_x(13) - 0.2,
+                   y = Temp_av[treatment == "Control" & timepoint == 11],
+                   yend = Temp_av[treatment == "Control" & timepoint == 13]),
+               color = "#0072B2") +
+  
+  # --- Herbivory segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) + 0.2, xend = transform_x(5) + 0.2,
+                   y = Temp_av[treatment == "Herbivory" & timepoint == 0],
+                   yend = Temp_av[treatment == "Herbivory" & timepoint == 5]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) + 0.2, xend = transform_x(7) + 0.2,
+                   y = Temp_av[treatment == "Herbivory" & timepoint == 5],
+                   yend = Temp_av[treatment == "Herbivory" & timepoint == 7]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) + 0.2, xend = transform_x(11) + 0.2,
+                   y = Temp_av[treatment == "Herbivory" & timepoint == 7],
+                   yend = Temp_av[treatment == "Herbivory" & timepoint == 11]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) + 0.2, xend = transform_x(13) + 0.2,
+                   y = Temp_av[treatment == "Herbivory" & timepoint == 11],
+                   yend = Temp_av[treatment == "Herbivory" & timepoint == 13]),
+               color = "#D55E00") +
+  
+  # --- Dashed lines Control & Herbivory ---
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = Temp_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 13],
+                   yend = Temp_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 51]),
+               color = "#0072B2", linetype = "dashed") +
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = Temp_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 13],
+                   yend = Temp_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 51]),
+               color = "#D55E00", linetype = "dashed") +
+  
+  # --- Later Control segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) - 0.2, xend = transform_x(54) - 0.2,
+                   y = Temp_av[treatment == "Control" & timepoint == 51],
+                   yend = Temp_av[treatment == "Control" & timepoint == 54]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) - 0.2, xend = transform_x(59) - 0.2,
+                   y = Temp_av[treatment == "Control" & timepoint == 54],
+                   yend = Temp_av[treatment == "Control" & timepoint == 59]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) - 0.2, xend = transform_x(61) - 0.2,
+                   y = Temp_av[treatment == "Control" & timepoint == 59],
+                   yend = Temp_av[treatment == "Control" & timepoint == 61]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) - 0.2, xend = transform_x(63) - 0.2,
+                   y = Temp_av[treatment == "Control" & timepoint == 61],
+                   yend = Temp_av[treatment == "Control" & timepoint == 63]),
+               color = "#0072B2") +
+  
+  # --- Later Herbivory segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) + 0.2, xend = transform_x(54) + 0.2,
+                   y = Temp_av[treatment == "Herbivory" & timepoint == 51],
+                   yend = Temp_av[treatment == "Herbivory" & timepoint == 54]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) + 0.2, xend = transform_x(59) + 0.2,
+                   y = Temp_av[treatment == "Herbivory" & timepoint == 54],
+                   yend = Temp_av[treatment == "Herbivory" & timepoint == 59]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) + 0.2, xend = transform_x(61) + 0.2,
+                   y = Temp_av[treatment == "Herbivory" & timepoint == 59],
+                   yend = Temp_av[treatment == "Herbivory" & timepoint == 61]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) + 0.2, xend = transform_x(63) + 0.2,
+                   y = Temp_av[treatment == "Herbivory" & timepoint == 61],
+                   yend = Temp_av[treatment == "Herbivory" & timepoint == 63]),
+               color = "#D55E00") +
+  
+  labs(x = "Time (weeks)",
+       y = "Temperature (°C)")
+
+pxS5G 
+```
+
+## Figure S5H
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+mdata.plot <- df %>%
+  group_by(year, timepoint, treatment) %>%
+  summarise(light_av = mean(light_weekly_mean, na.rm = TRUE),
+            light_se = std.error(light_weekly_mean, na.rm = TRUE),
+            .groups = 'drop')
+
+# Transformation function
+transform_x <- function(x) {
+  ifelse(x < 18, x, 
+         ifelse(x >= 18 & x <= 48, 18 + (x - 18) / 15, 
+                18 + (48 - 18) / 15 + (x - 48) * 1))
+}   
+
+control_start_light <- mdata.plot$light_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 0]
+control_end_light <- mdata.plot$light_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 7]
+herbivory_start_light <- mdata.plot$light_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 0]
+herbivory_end_light <- mdata.plot$light_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
+
+# --- Light weekly mean plot  ---
+
+S5H <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = light_av, color = treatment)) +
+  theme_bw(base_size = 12) +
+  geom_pointrange(aes(ymin = light_av - light_se, ymax = light_av + light_se),
+                  position = position_dodge(0.9)) +
+  theme(axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"),
+        axis.text.y = element_text(color = "black"),
+        axis.title.y = element_text(color = "black"),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Legend", values = c("#0072B2", "#D55E00"),
+                     labels = c("Control", "Herbivory"),
+                     breaks = c("Control", "Herbivory")) +
+  scale_x_continuous(
+    breaks = transform_x(c(0, 3, 6, 9, 12, 15, 18, 48, 51, 54, 57, 60, 63)),
+    labels = c("0", "3", "6", "9", "12", "15", "18", "48", "51", "54", "57", "60", "63")
+  ) +
+  expand_limits(x = c(0, transform_x(65)), y = 0) +
+  geom_rect(aes(xmin = transform_x(18), xmax = transform_x(48), ymin = -Inf, ymax = Inf),
+            fill = "#B0B0B0", color = "transparent", inherit.aes = FALSE) +
+  
+  # --- Control early segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) - 0.2, xend = transform_x(5) - 0.2,
+                   y = light_av[treatment == "Control" & timepoint == 0],
+                   yend = light_av[treatment == "Control" & timepoint == 5]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) - 0.2, xend = transform_x(7) - 0.2,
+                   y = light_av[treatment == "Control" & timepoint == 5],
+                   yend = light_av[treatment == "Control" & timepoint == 7]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) - 0.2, xend = transform_x(11) - 0.2,
+                   y = light_av[treatment == "Control" & timepoint == 7],
+                   yend = light_av[treatment == "Control" & timepoint == 11]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) - 0.2, xend = transform_x(13) - 0.2,
+                   y = light_av[treatment == "Control" & timepoint == 11],
+                   yend = light_av[treatment == "Control" & timepoint == 13]),
+               color = "#0072B2") +
+  
+  # --- Herbivory early segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(0) + 0.2, xend = transform_x(5) + 0.2,
+                   y = light_av[treatment == "Herbivory" & timepoint == 0],
+                   yend = light_av[treatment == "Herbivory" & timepoint == 5]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(5) + 0.2, xend = transform_x(7) + 0.2,
+                   y = light_av[treatment == "Herbivory" & timepoint == 5],
+                   yend = light_av[treatment == "Herbivory" & timepoint == 7]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(7) + 0.2, xend = transform_x(11) + 0.2,
+                   y = light_av[treatment == "Herbivory" & timepoint == 7],
+                   yend = light_av[treatment == "Herbivory" & timepoint == 11]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(11) + 0.2, xend = transform_x(13) + 0.2,
+                   y = light_av[treatment == "Herbivory" & timepoint == 11],
+                   yend = light_av[treatment == "Herbivory" & timepoint == 13]),
+               color = "#D55E00") +
+  
+  # --- Dashed mid segments ---
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = light_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 13],
+                   yend = light_av[mdata.plot$treatment == "Control" & mdata.plot$timepoint == 51]),
+               color = "#0072B2", linetype = "dashed") +
+  geom_segment(aes(x = transform_x(13), xend = transform_x(51),
+                   y = light_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 13],
+                   yend = light_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 51]),
+               color = "#D55E00", linetype = "dashed") +
+  
+  # --- Later Control segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) - 0.2, xend = transform_x(54) - 0.2,
+                   y = light_av[treatment == "Control" & timepoint == 51],
+                   yend = light_av[treatment == "Control" & timepoint == 54]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) - 0.2, xend = transform_x(59) - 0.2,
+                   y = light_av[treatment == "Control" & timepoint == 54],
+                   yend = light_av[treatment == "Control" & timepoint == 59]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) - 0.2, xend = transform_x(61) - 0.2,
+                   y = light_av[treatment == "Control" & timepoint == 59],
+                   yend = light_av[treatment == "Control" & timepoint == 61]),
+               color = "#0072B2") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) - 0.2, xend = transform_x(63) - 0.2,
+                   y = light_av[treatment == "Control" & timepoint == 61],
+                   yend = light_av[treatment == "Control" & timepoint == 63]),
+               color = "#0072B2") +
+  
+  # --- Later Herbivory segments ---
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(51) + 0.2, xend = transform_x(54) + 0.2,
+                   y = light_av[treatment == "Herbivory" & timepoint == 51],
+                   yend = light_av[treatment == "Herbivory" & timepoint == 54]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(54) + 0.2, xend = transform_x(59) + 0.2,
+                   y = light_av[treatment == "Herbivory" & timepoint == 54],
+                   yend = light_av[treatment == "Herbivory" & timepoint == 59]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(59) + 0.2, xend = transform_x(61) + 0.2,
+                   y = light_av[treatment == "Herbivory" & timepoint == 59],
+                   yend = light_av[treatment == "Herbivory" & timepoint == 61]),
+               color = "#D55E00") +
+  geom_segment(data = mdata.plot,
+               aes(x = transform_x(61) + 0.2, xend = transform_x(63) + 0.2,
+                   y = light_av[treatment == "Herbivory" & timepoint == 61],
+                   yend = light_av[treatment == "Herbivory" & timepoint == 63]),
+               color = "#D55E00") +
+  
+  labs(x = "Time (weeks)",
+       y = "Light")
+
+S5H
+```
