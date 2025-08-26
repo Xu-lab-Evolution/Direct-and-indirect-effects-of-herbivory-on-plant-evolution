@@ -20,8 +20,8 @@ invisible(lapply(pkgs, require, character.only = TRUE))
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 ctrl_col  <- "#0072B2"                               # control
 herb_col  <- "#D55E00"                               # herbivory
-sel_cols  <- c(Direct_Effect   = "#8CBA5E",          # for dynamics plot
-               Indirect_Effect = "#A87C7C")
+sel_cols  <- c(Direct_Effect   = "#B2182B",          # for dynamics plot
+               Indirect_Effect = "#2166AC")
 ```
 
 ## Data load
@@ -486,4 +486,5 @@ if (nrow(dyn_dat) > 0) {
 
 dev.off()
 ```
+
 
