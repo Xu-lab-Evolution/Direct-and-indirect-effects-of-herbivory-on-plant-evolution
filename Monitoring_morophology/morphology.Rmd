@@ -6,9 +6,9 @@ output: html_document
 ## Introduction
 This document analyzes the morphology: dry weight and surface area in both treatments (control and snail herbivory).
 
-**Note:** This R Markdown document is used to generate **Figure S2A** and **Figure S2B** in the supplementary.
+**Note:** This R Markdown document is used to generate **Figure S1A** and **Figure S1B** in the supplementary.
 
-### Figure S2A
+### Figure S1A
 ## Load required libraries
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
@@ -40,7 +40,7 @@ transform_x <- function(x) {
 ## Plot S2A: biomass per frond
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
-pxS2A <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = weight_av, color = treatment)) +
+pxS1A <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = weight_av, color = treatment)) +
   theme_bw(base_size = 14) +
   geom_pointrange(aes(ymin = weight_av - weight_se, ymax = weight_av + weight_se), position = position_dodge(0.9)) +
   theme(axis.title.x = element_text(color = "black"),
@@ -133,7 +133,7 @@ pxS2A <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = weight_av, color
   labs(x = "Time (weeks)",
        y = "Biomass per frond (mg)")
 
-pxS2A
+pxS1A
 ```
 
 ## Statistical analysis: biomass per frond
@@ -153,11 +153,11 @@ model <- lmer(biomass_fr ~ treatment + (1|timepoint)+ (1|pond), data = df2)
 Anova(model,test="F")
 ```
 
-### Figure S2B
-## Plot S2B: area per frond
+### Figure S1B
+## Plot S1B: area per frond
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
-pxS2B <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = area_av, color = treatment)) +
+pxS1B <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = area_av, color = treatment)) +
   theme_bw(base_size = 14) +
   geom_pointrange(aes(ymin = area_av - area_se, ymax = area_av + area_se), position = position_dodge(0.9)) +
   theme(axis.title.x = element_text(color = "black"),
@@ -249,7 +249,7 @@ pxS2B <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = area_av, color =
   labs(x = "Time (weeks)",
        y = "Area per frond (mm²)")
 
-pxS2B
+pxS1B
 ```
 
 ## Statistical analysis: area per frond
@@ -269,3 +269,4 @@ df2 <- df %>%
 model <- lmer(area_fr ~ treatment + (1|timepoint) + (1|pond), data = df2)
 Anova(model,test="F")
 ```
+
