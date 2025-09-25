@@ -6,9 +6,9 @@ output: html_document
 ## Introduction
 This document analyzes the **relative growth rate**, and **number of consumed fronds** of duckweed populations (previously exposed to herbivory and control) to snail herbivory. The figures display violin plots of growth rates or consumed fronds, grouped by year and treatment.
 
-**Note:** This R Markdown document is used to generate **Figure 1C** in the manuscript, and **Figure S2C** in the supplementary
+**Note:** This R Markdown document is used to generate **Figure 2C** in the manuscript, and **Figure S1C** in the supplementary
 
-### Figure 1C
+### Figure 2C
 ## Load required libraries
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
@@ -27,7 +27,7 @@ df$year <- as.factor(df$year)
 df$rel.count <- (log(df$count_w14) - log(df3$count_w12))/14
 ```
 
-## Figure 1C: relative growth rate by year and treatment
+## Figure 2C: relative growth rate by year and treatment
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 px1C <- ggplot(df3, aes(x = year, y = rel.count, fill = treatment)) +
@@ -66,7 +66,7 @@ model <- lmer(rel.count ~ treatment + (1|pond), data = df2)
 Anova(model, test = "F")
 ```
 
-### Figure S2C
+### Figure S1C
 ## Import and prepare data
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
@@ -74,7 +74,7 @@ df <- read.table("SA.txt", sep = "\t", header = TRUE)
 df$year <- as.factor(df$year)
 ```
 
-## Plot S2C: adjusted consumed fronds by year and treatment
+## Plot S1C: adjusted consumed fronds by year and treatment
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 px5 <- ggplot(df, aes(x = year, y = adjusted_consumed, fill = treatment)) +
@@ -107,3 +107,4 @@ df2 <- df %>%
 model <- lmer(adjusted_consumed ~ treatment + (1|pond) + (1|timepoint), data = df2)
 Anova(model, test="F")
 ```
+
