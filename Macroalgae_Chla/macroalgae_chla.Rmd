@@ -81,7 +81,7 @@ herb_63 <- get_val(63, "herbivory")
 ## Plot 2D: macroalgae over time
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
-px1D <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = macroalgae_av, color = treatment)) +
+px2D <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = macroalgae_av, color = treatment)) +
   theme_bw(base_size = 14) +
   geom_pointrange(aes(ymin = macroalgae_av - macroalgae_se, ymax = macroalgae_av + macroalgae_se),
                   position = position_dodge(0.9)) +
@@ -135,7 +135,7 @@ px1D <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = macroalgae_av, co
   
   labs(x = "Time (weeks)", y = "Macroalgae concentration")
 
-px1D
+px2D
 ```
 
 ## Statistical analysis
@@ -181,7 +181,7 @@ transform_x <- function(x) {
 ## Plot S1D: Chlorophyll-a concentrations
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-px4 <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = chla_av, color = treatment)) +
+pxS1D <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = chla_av, color = treatment)) +
   theme_bw(base_size = 14) +
   geom_pointrange(aes(ymin = chla_av - chla_se, ymax = chla_av + chla_se), position = position_dodge(0.9)) +
   theme(axis.title.x = element_text(color = "black"),
@@ -268,7 +268,7 @@ px4 <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = chla_av, color = t
   labs(x = "Time (weeks)",
        y = "Chlorophyll-a (nmol/L)")
 
-px4
+pxS1D
 ```
 
 ## Statistical analysis
@@ -293,3 +293,4 @@ model <- lmer(Chlorophyll_a ~ treatment + (timepoint|pond), data = df2)
 Anova(model,test="F")
 
 ```
+
