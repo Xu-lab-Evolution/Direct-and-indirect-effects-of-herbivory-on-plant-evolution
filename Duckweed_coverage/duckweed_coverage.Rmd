@@ -11,9 +11,9 @@ This document analyzes duckweed surface coverage under different treatments. It 
 - Running linear mixed-effects models to assess treatment effects at early and late timepoints.
 - Running linear mixed-effects model to assess the effect of snail herbivory on duckweed surface coverage in 2024.
 
-**Note:** This R Markdown document is used to generate **Figure 1A** in the manuscript.
+**Note:** This R Markdown document is used to generate **Figure 2A** in the manuscript and **Table S2** in supplementary.
 
-## Figure 1A
+## Figure 2A
 ## Load required libraries
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
@@ -169,4 +169,5 @@ df3 <- df %>%
 
 model <- lmer(surface_coverage ~ snail + (1|pond) + (1|timepoint), data = df3)
 Anova(model, test = "F")
+
 ```
