@@ -10,9 +10,9 @@ This document analyzes total phosphurus concentration, other nutrient concentrat
 - Plotting TP over time,
 - Running linear mixed-effects models to assess treatment effects at early and late timepoints for nutrient concentrations and physiochemical parameters .
 
-  **Note:** This R Markdown document is used to generate **Figure 1D** in the manuscript, **Figure S5** and **Table S6** in the supplementary.
+  **Note:** This R Markdown document is used to generate **Figure 2D** in the manuscript, **Figure S4** and **Table S6** in the supplementary.
 
-### Figure 1B
+### Figure 2D
 ## Load required libraries
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
@@ -55,7 +55,7 @@ herbivory_end_TP <- mdata.plot$TP_av[mdata.plot$treatment == "Herbivory" & mdata
 ## Plot: TP over time by treatment
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
-px1B <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = TP_av, color = treatment)) +
+px2D <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = TP_av, color = treatment)) +
   theme_bw(base_size = 14) +
   geom_pointrange(aes(ymin = TP_av - TP_se, ymax = TP_av + TP_se), position = position_dodge(0.9)) +
   theme(axis.title.x = element_text(color = "black"),
@@ -172,7 +172,7 @@ px1B <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = TP_av, color = tr
   labs(x = "Time (weeks)",
        y = "Total Phosphorus concentration")
 
-px1B
+px2D
 ```
 
 ## Statistical analysis: first growing season (weeks 7–13)
@@ -294,7 +294,7 @@ Anova(model, test = "F")
 summary(model)
 ```
 
-## Figure S5A
+## Figure S4
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 mdata.plot <- df %>%
@@ -315,7 +315,7 @@ control_end_PO4      <- mdata.plot$PO4_av[mdata.plot$treatment == "Control" & md
 herbivory_start_PO4  <- mdata.plot$PO4_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 0]
 herbivory_end_PO4    <- mdata.plot$PO4_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
 
-pxS5A <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = PO4_av, color = treatment)) +
+pxS4A <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = PO4_av, color = treatment)) +
   theme_bw(base_size = 12) +
   geom_pointrange(aes(ymin = PO4_av - PO4_se, ymax = PO4_av + PO4_se), 
                   position = position_dodge(0.9)) +
@@ -438,10 +438,10 @@ pxS5A <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = PO4_av, color = 
   labs(x = NULL,
        y = "PO4 concentration")
 
-pxS5A
+pxS4A
 ```
 
-## Figure S5B
+## Figure S4B
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 mdata.plot <- df %>%
@@ -462,7 +462,7 @@ control_end_NH4      <- mdata.plot$NH4_av[mdata.plot$treatment == "Control" & md
 herbivory_start_NH4  <- mdata.plot$NH4_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 0]
 herbivory_end_NH4    <- mdata.plot$NH4_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
 
-pxS5B <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = NH4_av, color = treatment)) +
+pxS4B <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = NH4_av, color = treatment)) +
   theme_bw(base_size = 12) +
   geom_pointrange(aes(ymin = NH4_av - NH4_se, ymax = NH4_av + NH4_se), 
                   position = position_dodge(0.9)) +
@@ -584,10 +584,10 @@ pxS5B <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = NH4_av, color = 
   
   labs(x = NULL, y = "NH4 concentration")
 
-pxS5B
+pxS4B
 ```
 
-## Figure S5C
+## Figure S4C
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 mdata.plot <- df %>%
@@ -609,7 +609,7 @@ herbivory_start_TOC  <- mdata.plot$TOC_av[mdata.plot$treatment == "Herbivory" & 
 herbivory_end_TOC    <- mdata.plot$TOC_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
 
 ## --- Plot TOC ---
-pxS5C <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = TOC_av, color = treatment)) +
+pxS4C <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = TOC_av, color = treatment)) +
   theme_bw(base_size = 12) +
   geom_pointrange(aes(ymin = TOC_av - TOC_se, ymax = TOC_av + TOC_se), 
                   position = position_dodge(0.9)) +
@@ -731,10 +731,10 @@ pxS5C <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = TOC_av, color = 
   
   labs(x = NULL, y = "TOC concentration")
 
-pxS5C
+pxS4C
 ```
 
-## Figure S5D
+## Figure S4D
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -757,7 +757,7 @@ herbivory_start_pH  <- mdata.plot$pH_av[mdata.plot$treatment == "Herbivory" & md
 herbivory_end_pH    <- mdata.plot$pH_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
 
 ## --- Plot pH ---
-pxS5D <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = pH_av, color = treatment)) +
+pxS4D <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = pH_av, color = treatment)) +
   theme_bw(base_size = 12) +
   geom_pointrange(aes(ymin = pH_av - pH_se, ymax = pH_av + pH_se), 
                   position = position_dodge(0.9)) +
@@ -879,10 +879,10 @@ pxS5D <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = pH_av, color = t
   
   labs(x = NULL, y = "pH")
 
-pxS5D
+pxS4D
 ```
 
-## Figure S5E
+## Figure S4E
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 mdata.plot <- df %>%
@@ -905,7 +905,7 @@ herbivory_end_Cond <- mdata.plot$Cond_av[mdata.plot$treatment == "Herbivory" & m
 
 # --- Conductivity plot ---
 
-pxS5E <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = Cond_av, color = treatment)) +
+pxS4E <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = Cond_av, color = treatment)) +
   theme_bw(base_size = 12) +
   geom_pointrange(aes(ymin = Cond_av - Cond_se, ymax = Cond_av + Cond_se),
                   position = position_dodge(0.9)) +
@@ -1025,10 +1025,10 @@ pxS5E <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = Cond_av, color =
   
   labs(x = NULL, y = "Conductivity (µS/cm)")
 
-pxS5E
+pxS4E
 ```
 
-## Figure S5F
+## Figure S4F
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -1052,7 +1052,7 @@ herbivory_end_O2 <- mdata.plot$O2_av[mdata.plot$treatment == "Herbivory" & mdata
 
 # --- O2 percentage plot ---
 
-pxS5F <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = O2_av, color = treatment)) +
+pxS4F <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = O2_av, color = treatment)) +
   theme_bw(base_size = 12) +
   geom_pointrange(aes(ymin = O2_av - O2_se, ymax = O2_av + O2_se),
                   position = position_dodge(0.9)) +
@@ -1174,10 +1174,10 @@ pxS5F <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = O2_av, color = t
   
   labs(x = NULL, y = "O2 (%)")
 
-pxS5F
+pxS4F
 ```
 
-## Figure S5G
+## Figure S4G
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -1201,7 +1201,7 @@ herbivory_end_Temp   <- mdata.plot$Temp_av[mdata.plot$treatment == "Herbivory" &
 
 # --- Temperature plot  ---
 
-pxS5G <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = Temp_av, color = treatment)) +
+pxS4G <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = Temp_av, color = treatment)) +
   theme_bw(base_size = 12) +
   geom_pointrange(aes(ymin = Temp_av - Temp_se, ymax = Temp_av + Temp_se),
                   position = position_dodge(0.9)) +
@@ -1324,10 +1324,10 @@ pxS5G <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = Temp_av, color =
   labs(x = "Time (weeks)",
        y = "Temperature (°C)")
 
-pxS5G 
+pxS4G 
 ```
 
-## Figure S5H
+## Figure S4H
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 mdata.plot <- df %>%
@@ -1350,7 +1350,7 @@ herbivory_end_light <- mdata.plot$light_av[mdata.plot$treatment == "Herbivory" &
 
 # --- Light weekly mean plot  ---
 
-S5H <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = light_av, color = treatment)) +
+S4H <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = light_av, color = treatment)) +
   theme_bw(base_size = 12) +
   geom_pointrange(aes(ymin = light_av - light_se, ymax = light_av + light_se),
                   position = position_dodge(0.9)) +
@@ -1473,5 +1473,6 @@ S5H <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = light_av, color = 
   labs(x = "Time (weeks)",
        y = "Light")
 
-S5H
+S4H
 ```
+
