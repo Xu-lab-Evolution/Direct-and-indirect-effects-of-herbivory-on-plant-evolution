@@ -58,7 +58,7 @@ control_end_coverage <- mdata.plot$coverage_av[mdata.plot$treatment == "Control"
 herbivory_start_coverage <- mdata.plot$coverage_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 0]
 herbivory_end_coverage <- mdata.plot$coverage_av[mdata.plot$treatment == "Herbivory" & mdata.plot$timepoint == 7]
 
-px1A <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = coverage_av, color = treatment)) +
+px2A <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = coverage_av, color = treatment)) +
   theme_bw(base_size = 14) +
   geom_pointrange(aes(ymin = coverage_av - coverage_se, ymax = coverage_av + coverage_se), position = position_dodge(0.9)) +
   theme(axis.title.x = element_text(color = "black"),
@@ -136,7 +136,7 @@ px1A <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = coverage_av, colo
                color = "#D55E00") +
   labs(x = "Time (weeks)", y = "Duckweed coverage (%)")
 
-px1A
+px2A
 ```
 
 ## Statistical analysis
@@ -171,3 +171,4 @@ model <- lmer(surface_coverage ~ snail + (1|pond) + (1|timepoint), data = df3)
 Anova(model, test = "F")
 
 ```
+
