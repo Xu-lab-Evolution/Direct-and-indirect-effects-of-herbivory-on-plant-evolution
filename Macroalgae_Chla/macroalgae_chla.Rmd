@@ -7,9 +7,9 @@ output: html_document
 
 This document investigates the temporal dynamics of macroalgae concentration in control vs herbivory treatments, and analyzes Chlorophyll-a concentrations (nmol/L) under different treatments over time.
 
-**Note:** This R Markdown document is used to generate **Figure 1D** in manuscript and **FigureS2D** in supplementary.
+**Note:** This R Markdown document is used to generate **Figure 2D** in manuscript and **FigureS1D** in supplementary.
 
-### Figure 1D
+### Figure 2D
 ## Load required libraries
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
@@ -78,7 +78,7 @@ herb_61 <- get_val(61, "herbivory")
 herb_63 <- get_val(63, "herbivory")
 ```
 
-## Plot 1D: macroalgae over time
+## Plot 2D: macroalgae over time
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 px1D <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = macroalgae_av, color = treatment)) +
@@ -152,7 +152,7 @@ model <- lmer(macroalgae_logit~ treatment + (1|timepoint) + (1|pond), data = df1
 Anova(model,test="F")
 ```
 
-### FigureS2D
+### FigureS1D
 ## Data import and summary
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
@@ -178,7 +178,7 @@ transform_x <- function(x) {
 }
 ```
 
-## Plot S2D: Chlorophyll-a concentrations
+## Plot S1D: Chlorophyll-a concentrations
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 px4 <- ggplot(mdata.plot, aes(x = transform_x(timepoint), y = chla_av, color = treatment)) +
@@ -291,4 +291,5 @@ df2 <- df %>%
 
 model <- lmer(Chlorophyll_a ~ treatment + (timepoint|pond), data = df2)
 Anova(model,test="F")
+
 ```
