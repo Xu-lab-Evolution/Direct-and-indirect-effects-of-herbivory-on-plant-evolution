@@ -6,7 +6,7 @@ output: html_document
 ## Introduction
 This document analyzes metabolites of the mixed population under different treatments 2023 and 2024. It includes: metabolite differential analysis and volcano plots
 
-**Note:** This R Markdown document is used to generate **Figure S3A-S3B** in the manuscript.
+**Note:** This R Markdown document is used to generate **Figure S2A-S2B** in the manuscript.
 
 ## Load required libraries
 
@@ -158,7 +158,7 @@ plot <- ggplot(data = de) +
   scale_color_manual(values = c("blue", "red", "black")) +
   geom_vline(xintercept = 0, col = "black", linetype = "longdash") +
   geom_hline(yintercept = -log10(0.05), col = "black", linetype = "longdash") +
-  scale_y_continuous(limits = c(0, y_max)) +  # <-- 🔥 FIX Y-AXIS
+  scale_y_continuous(limits = c(0, y_max)) + 
   xlab(expression(paste(Log[2], " Fold Changes"))) +
   ylab(expression(paste(-Log[10], " P"))) +
   theme(
@@ -184,7 +184,7 @@ plot.2 <- ggplot(data = de.2) +
   scale_color_manual(values = c("blue", "red", "black")) +
   geom_vline(xintercept = 0, col = "black", linetype = "longdash") +
   geom_hline(yintercept = -log10(0.05), col = "black", linetype = "longdash") +
-  scale_y_continuous(limits = c(0, y_max)) +  # <-- 🔥 FIX Y-AXIS
+  scale_y_continuous(limits = c(0, y_max)) +  
   xlab(expression(paste(Log[2], " Fold Changes"))) +
   ylab(expression(paste(-Log[10], " P"))) +
   theme(
@@ -205,4 +205,5 @@ plot.2
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 combined_plot <- ggarrange(plot, plot.2, labels = c("A", "B"), ncol = 2, nrow = 1)
 combined_plot
+
 ```
