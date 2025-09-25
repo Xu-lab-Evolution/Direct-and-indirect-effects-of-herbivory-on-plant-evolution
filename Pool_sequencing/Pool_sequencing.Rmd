@@ -11,7 +11,7 @@ toc: true
 
 This document describes a pool-sequencing analysis pipeline designed to explore genotype dynamics and microbial community composition in *Spirodela polyrhiza* under control and snail herbivory experimental treatments. The pipeline includes steps for preprocessing raw reads, host read removal, genotype frequency estimation using the HAF-pipeline, and taxonomic profiling with Kraken2. Statistical analysis and visualizations are performed in R.
    
-   -Figure 2A-F snd Figure S4: Circular and time-series plots of genotype dynamics
+   -Figure 3A-F snd Figure S3: Circular and time-series plots of genotype dynamics
    -Table S3: : genotype frequency model (mixed effects)
    -Table S4: PERMANOVA on microbial and algal community structure
    -Table S5: Shannon diversity (mixed model)
@@ -846,3 +846,4 @@ mdata.df2 <- mdata.df[which(mdata.df$treatment != "other_sample"),]
 model <- lmer(value ~ treatment * genotype + (1|pond) + (1|week), data = mdata.df2)
 Anova(model, test.statistic = 'F')
 ```
+
