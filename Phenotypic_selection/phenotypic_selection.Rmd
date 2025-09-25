@@ -1,0 +1,629 @@
+---
+title: "Phenotypic-selection"
+author: "Sara Nouere"
+output: html_document
+---
+
+This R Markdown document analyzes the phenotypic selection. The analyses support the generation of **Figure 4** and **Table 1** (main text) and **Figures S6-11**, and **Table S7 and S8** (supplementary material) in the manuscript.
+
+
+## Load required libraries
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+pkgs <- c("dplyr", "tidyr", "ggplot2", "lme4", "lmerTest",
+          "emmeans", "broom.mixed", "patchwork", "purrr")
+invisible(lapply(pkgs, require, character.only = TRUE))
+```
+
+## prepare constants 
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+ctrl_col  <- "#0072B2"                               # control
+herb_col  <- "#D55E00"                               # herbivory
+sel_cols  <- c(Direct_Effect   = "#B2182B",          # for dynamics plot
+               Indirect_Effect = "#2166AC")
+```
+
+## Data load
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+df2023 <- read.table("data2023.txt", sep = "\t", header = TRUE,
+                     check.names = FALSE)
+df2024 <- read.table("data2024.txt", sep = "\t", header = TRUE,
+                     check.names = FALSE)
+
+fix_names <- function(x) gsub("[ _-]", ".", x)
+names(df2023) <- fix_names(names(df2023))
+names(df2024) <- fix_names(names(df2024))
+
+df2023$year <- 2023
+df2024$year <- 2024
+df_full     <- bind_rows(df2023, df2024)
+```
+
+## Metabolite list
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+metabolites <- c(
+  "Chlorogenic.acid","Cyanidine.3.Glc","Luteoline.8.C.Glc",
+  "Apigenine.8.C.Glc","Luteoline.7.O.Glc","Apigenine.7.O.Glc",
+  "Tyramine","Tryptamine","Shikimic.acid","Apigenine","Luteoline",
+  "Coumaric.acid.p","Caffeic.acid","Ferulic.acid","Sinapic.acid",
+  "Cyanidin.Mal.Glc","Kynurenic.acid","Kynurenine","Serotonin.1"
+)
+```
+
+## Quality filter
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+keep_met <- purrr::keep(metabolites, function(met) {
+  if (!met %in% names(df_full)) return(FALSE)
+  miss_ok <- df_full %>%
+    group_by(year) %>%
+    summarise(miss = mean(is.na(.data[[met]])), .groups = "drop") %>%
+    summarise(all(miss <= .3)) %>% pull()
+  var_ok  <- df_full %>%
+    group_by(year) %>%
+    summarise(v = var(.data[[met]], na.rm = TRUE), .groups = "drop") %>%
+    summarise(all(!is.na(v) & v > 0)) %>% pull()
+  miss_ok && var_ok
+})
+```
+
+## Basic cleaning
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+df_full <- df_full %>%
+  mutate(across(c(fitness, all_of(keep_met)), as.numeric),
+         pond     = factor(pond),
+         genotype = factor(genotype),
+         condition = case_when(
+           treatmentpond == "control"   & mesh == 1 ~ "Control_Net",
+           treatmentpond == "control"   & mesh == 0 ~ "Control_NoNet",
+           treatmentpond == "herbivory" & mesh == 1 ~ "Herbivore_Net",
+           treatmentpond == "herbivory" & mesh == 0 ~ "Herbivore_NoNet",
+           TRUE ~ NA_character_
+         )) %>%
+  filter(!is.na(condition)) %>%
+  mutate(condition = factor(condition,
+           levels = c("Control_Net","Control_NoNet",
+                      "Herbivore_Net","Herbivore_NoNet")))
+```
+
+## Core analysis function
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+calc_effects <- function(df, met) {
+
+  make_dat <- function(log = FALSE) {
+    out <- df %>%
+      select(fitness, pond, genotype, condition,
+             treatmentpond, !!met) %>%
+      rename(met_raw = !!met) %>%
+      mutate(met_use = if (log) log1p(met_raw) else met_raw) %>%
+      filter(is.finite(met_use)) %>% na.omit()
+    if (nrow(out) < 20)           return(NULL)
+    if (sd(out$met_use) == 0)     return(NULL)
+    if (nlevels(out$condition) < 4) return(NULL)
+    out
+  }
+
+  d_raw <- make_dat(FALSE); d_log <- make_dat(TRUE)
+  fit   <- function(d) lmer(fitness ~ met_use * condition +
+                            (1|pond) + (1|genotype),
+                            data = d,
+                            control = lmerControl(optimizer="bobyqa",
+                                      optCtrl=list(maxfun=2e5)))
+  m_raw <- tryCatch(if (!is.null(d_raw)) fit(d_raw), error = identity)
+  m_log <- tryCatch(if (!is.null(d_log)) fit(d_log), error = identity)
+
+  if (inherits(m_raw,"merMod") || inherits(m_log,"merMod")) {
+    aic_raw <- if (inherits(m_raw,"merMod")) AIC(m_raw) else Inf
+    aic_log <- if (inherits(m_log,"merMod")) AIC(m_log) else Inf
+    best <- if (aic_log < aic_raw) list(m=m_log,d=d_log,tf="log1p")
+            else                    list(m=m_raw,d=d_raw,tf="raw")
+  } else return(NULL)
+
+  st   <- emtrends(best$m, ~ condition, var="met_use")
+  cont <- contrast(st, list(
+    Indirect_Effect = c(-1,0,1,0),
+    Combined_Effect = c(0,-1,0,1),
+    Direct_Effect   = c(1,-1,-1,1)
+  ))
+  eff  <- broom::tidy(cont) %>%
+    select(effect=contrast, estimate, std.error, p.value) %>%
+    tidyr::pivot_wider(names_from  = effect,
+                       values_from = c(estimate,std.error,p.value))
+
+  list(summary_row = tibble::tibble(Metabolite=met,
+                                    Transformation=best$tf) %>% dplyr::bind_cols(eff),
+       model = best$m,
+       data  = best$d,
+       slopes= st)
+}
+```
+
+## Year-wise analysis
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+all_res <- purrr::map(set_names(c(2023,2024)), function(yr) {
+
+  df_yr <- filter(df_full, year==yr)
+
+  # outlier removal per condition
+  df_clean <- df_yr %>%
+    group_by(condition) %>%
+    mutate(across(all_of(keep_met), function(v) {
+      if (sum(!is.na(v)) < 4) return(v)
+      iqr <- IQR(v, na.rm=TRUE)
+      if (is.na(iqr) || iqr==0) return(v)
+      qs <- quantile(v, c(.25,.75), na.rm=TRUE)
+      lower <- qs[1]-1.5*iqr; upper <- qs[2]+1.5*iqr
+      replace(v, v<lower | v>upper, NA)
+    })) %>% ungroup()
+
+  purrr::map(set_names(keep_met), ~calc_effects(df_clean,.x))
+})
+
+summaries <- purrr::map(all_res, ~bind_rows(purrr::map(.x,"summary_row")))
+effects_2023 <- summaries[["2023"]]
+effects_2024 <- summaries[["2024"]]
+
+if (nrow(effects_2023)>0) names(effects_2023)[-1] <- paste0(names(effects_2023)[-1],"_2023")
+if (nrow(effects_2024)>0) names(effects_2024)[-1] <- paste0(names(effects_2024)[-1],"_2024")
+
+summary_all <- full_join(effects_2023,effects_2024, by="Metabolite")
+write.csv(summary_all,"comprehensive_selection_summary_2023_2024.csv",row.names=FALSE)
+```
+
+## post-hoc year-difference tests
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+
+z_p <- function(est24, se24, est23, se23) {
+  if (is.na(est24) || is.na(se24) || is.na(est23) || is.na(se23)) return(NA_real_)
+  z <- (est24 - est23) / sqrt(se24^2 + se23^2)
+  2*pnorm(-abs(z))
+}
+
+year_diff <- summary_all %>%
+  dplyr::rowwise() %>%   
+  dplyr::mutate(
+    # Direct
+    Direct_diff     = estimate_Direct_Effect_2024 - estimate_Direct_Effect_2023,
+    Direct_SEdiff   = sqrt(std.error_Direct_Effect_2024^2 + std.error_Direct_Effect_2023^2),
+    Direct_z        = ifelse(is.na(Direct_SEdiff), NA_real_, Direct_diff / Direct_SEdiff),
+    Direct_pYear    = z_p(estimate_Direct_Effect_2024, std.error_Direct_Effect_2024,
+                          estimate_Direct_Effect_2023, std.error_Direct_Effect_2023),
+    
+    # Indirect
+    Indirect_diff   = estimate_Indirect_Effect_2024 - estimate_Indirect_Effect_2023,
+    Indirect_SEdiff = sqrt(std.error_Indirect_Effect_2024^2 + std.error_Indirect_Effect_2023^2),
+    Indirect_z      = ifelse(is.na(Indirect_SEdiff), NA_real_, Indirect_diff / Indirect_SEdiff),
+    Indirect_pYear  = z_p(estimate_Indirect_Effect_2024, std.error_Indirect_Effect_2024,
+                          estimate_Indirect_Effect_2023, std.error_Indirect_Effect_2023),
+    
+    # Combined
+    Combined_diff   = estimate_Combined_Effect_2024 - estimate_Combined_Effect_2023,
+    Combined_SEdiff = sqrt(std.error_Combined_Effect_2024^2 + std.error_Combined_Effect_2023^2),
+    Combined_z      = ifelse(is.na(Combined_SEdiff), NA_real_, Combined_diff / Combined_SEdiff),
+    Combined_pYear  = z_p(estimate_Combined_Effect_2024, std.error_Combined_Effect_2024,
+                          estimate_Combined_Effect_2023, std.error_Combined_Effect_2023)
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(Metabolite,
+                Direct_diff,   Direct_SEdiff,   Direct_z,   Direct_pYear,
+                Indirect_diff, Indirect_SEdiff, Indirect_z, Indirect_pYear,
+                Combined_diff, Combined_SEdiff, Combined_z, Combined_pYear)
+
+
+
+write.csv(year_diff, "year_difference_tests_per_effect.csv", row.names = FALSE)
+```
+
+## Table 1 (MAIN TEXT): Δβ (2024–2023) with 95% CI + p
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+
+table_main <- year_diff %>%
+  dplyr::mutate(
+    # 95% CI for the differences
+    Direct_LCL   = Direct_diff   - 1.96 * Direct_SEdiff,
+    Direct_UCL   = Direct_diff   + 1.96 * Direct_SEdiff,
+    Indirect_LCL = Indirect_diff - 1.96 * Indirect_SEdiff,
+    Indirect_UCL = Indirect_diff + 1.96 * Indirect_SEdiff
+  ) %>%
+  dplyr::transmute(
+    Metabolite,
+    `Δ Direct β (2024–2023)` = Direct_diff,
+    `Direct 95% CI`          = sprintf("(%0.3f, %0.3f)", Direct_LCL, Direct_UCL),
+    `Direct p`               = Direct_pYear,
+    `Δ Indirect β (2024–2023)` = Indirect_diff,
+    `Indirect 95% CI`          = sprintf("(%0.3f, %0.3f)", Indirect_LCL, Indirect_UCL),
+    `Indirect p`               = Indirect_pYear
+  )
+
+table_main <- table_main %>%
+  dplyr::mutate(
+    `Δ Direct β (2024–2023)`   = round(`Δ Direct β (2024–2023)`, 3),
+    `Direct p`                 = signif(`Direct p`, 3),
+    `Δ Indirect β (2024–2023)` = round(`Δ Indirect β (2024–2023)`, 3),
+    `Indirect p`               = signif(`Indirect p`, 3)
+  )
+
+readr::write_csv(table_main, "Table1_year_differences_main.csv")
+```
+
+## Table S8
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+supp <- summary_all %>%
+  # add 95% CI columns for each needed estimate/SE
+  dplyr::mutate(
+    # Direct 2023 & 2024
+    Direct_2023_LCL = estimate_Direct_Effect_2023 - 1.96 * std.error_Direct_Effect_2023,
+    Direct_2023_UCL = estimate_Direct_Effect_2023 + 1.96 * std.error_Direct_Effect_2023,
+    Direct_2024_LCL = estimate_Direct_Effect_2024 - 1.96 * std.error_Direct_Effect_2024,
+    Direct_2024_UCL = estimate_Direct_Effect_2024 + 1.96 * std.error_Direct_Effect_2024,
+    # Indirect 2023 & 2024
+    Indirect_2023_LCL = estimate_Indirect_Effect_2023 - 1.96 * std.error_Indirect_Effect_2023,
+    Indirect_2023_UCL = estimate_Indirect_Effect_2023 + 1.96 * std.error_Indirect_Effect_2023,
+    Indirect_2024_LCL = estimate_Indirect_Effect_2024 - 1.96 * std.error_Indirect_Effect_2024,
+    Indirect_2024_UCL = estimate_Indirect_Effect_2024 + 1.96 * std.error_Indirect_Effect_2024
+  ) %>%
+  # format as β (95% CI), p for each year/effect
+  dplyr::transmute(
+    Metabolite,
+    
+    `Direct 2023 β (95% CI)`   = ifelse(
+      is.na(estimate_Direct_Effect_2023), NA_character_,
+      sprintf("%0.3f (%0.3f, %0.3f)", estimate_Direct_Effect_2023, Direct_2023_LCL, Direct_2023_UCL)
+    ),
+    `Direct 2023 p`            = ifelse(is.na(p.value_Direct_Effect_2023), NA, signif(p.value_Direct_Effect_2023, 3)),
+    
+    `Direct 2024 β (95% CI)`   = ifelse(
+      is.na(estimate_Direct_Effect_2024), NA_character_,
+      sprintf("%0.3f (%0.3f, %0.3f)", estimate_Direct_Effect_2024, Direct_2024_LCL, Direct_2024_UCL)
+    ),
+    `Direct 2024 p`            = ifelse(is.na(p.value_Direct_Effect_2024), NA, signif(p.value_Direct_Effect_2024, 3)),
+    
+    `Indirect 2023 β (95% CI)` = ifelse(
+      is.na(estimate_Indirect_Effect_2023), NA_character_,
+      sprintf("%0.3f (%0.3f, %0.3f)", estimate_Indirect_Effect_2023, Indirect_2023_LCL, Indirect_2023_UCL)
+    ),
+    `Indirect 2023 p`          = ifelse(is.na(p.value_Indirect_Effect_2023), NA, signif(p.value_Indirect_Effect_2023, 3)),
+    
+    `Indirect 2024 β (95% CI)` = ifelse(
+      is.na(estimate_Indirect_Effect_2024), NA_character_,
+      sprintf("%0.3f (%0.3f, %0.3f)", estimate_Indirect_Effect_2024, Indirect_2024_LCL, Indirect_2024_UCL)
+    ),
+    `Indirect 2024 p`          = ifelse(is.na(p.value_Indirect_Effect_2024), NA, signif(p.value_Indirect_Effect_2024, 3))
+  )
+
+readr::write_csv(supp, "TableS_raw_betas_by_year.csv")
+```
+
+## Table S7: Classification
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+# This function classifies selection type based on p-values
+classify_selection_detailed <- function(df_row, year_suffix) {
+    p_direct_col <- paste0("p.value_Direct_Effect_", year_suffix)
+    p_indirect_col <- paste0("p.value_Indirect_Effect_", year_suffix)
+    est_direct_col <- paste0("estimate_Direct_Effect_", year_suffix)
+    est_indirect_col <- paste0("estimate_Indirect_Effect_", year_suffix)
+
+    if (!all(c(p_direct_col, p_indirect_col, est_direct_col, est_indirect_col) %in% names(df_row))) {
+        return("Inestimable")
+    }
+
+    p_direct <- df_row[[p_direct_col]]
+    p_indirect <- df_row[[p_indirect_col]]
+    est_direct <- df_row[[est_direct_col]]
+    est_indirect <- df_row[[est_indirect_col]]
+
+    if(is.na(p_direct) || is.na(p_indirect)) return("Inestimable")
+    
+    direct_sig <- p_direct < 0.05
+    indirect_sig <- p_indirect < 0.05
+    
+    sign_char <- function(val) ifelse(val > 0, "(+)", "(-)")
+    
+    sign_direct_char <- sign_char(est_direct)
+    sign_indirect_char <- sign_char(est_indirect)
+    
+    if (direct_sig && !indirect_sig) return(paste("Direct Dominant", sign_direct_char))
+    if (!direct_sig && indirect_sig) return(paste("Indirect Dominant", sign_indirect_char))
+    if (!direct_sig && !indirect_sig) return("No Significant Selection")
+    if (direct_sig && indirect_sig) {
+        if (sign(est_direct) == sign(est_indirect)) {
+            return(paste("Synergistic", sign_direct_char))
+        } else {
+            return(paste0("Antagonistic ", sign_direct_char, "/", sign_indirect_char))
+        }
+    }
+    return("Unclassified")
+}
+
+classification_summary <- summary_all %>%
+  rowwise() %>%
+  mutate(
+    Selection_Type_2023 = classify_selection_detailed(cur_data(), "2023"),
+    Selection_Type_2024 = classify_selection_detailed(cur_data(), "2024")
+  ) %>%
+  select(Metabolite, Selection_Type_2023, Selection_Type_2024)
+
+write.csv(classification_summary,"selection_type_summary_by_year.csv",row.names=FALSE)
+```
+
+## Figure S8-S12: Scatter plots
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+
+# Select all metabolites 
+signif_mets <- summary_all %>%
+  pull(Metabolite) %>%
+  unique() %>%
+  sort()
+
+# Updated create_scatter function using a single panel layout with facet_wrap
+create_scatter <- function(dat, res_list, met) {
+  dat <- dat %>%
+    mutate(
+      treatmentpond = ifelse(grepl("^Control", condition), "control", "herbivory"),
+      panel = case_when(
+        grepl("_Net", condition) & year == 2023 ~ "Indirect 2023",
+        grepl("_Net", condition) & year == 2024 ~ "Indirect 2024",
+        grepl("_NoNet", condition) & year == 2023 ~ "Combined 2023",
+        grepl("_NoNet", condition) & year == 2024 ~ "Combined 2024"
+      )
+    )
+  
+  pred_rib <- purrr::map_dfr(unique(dat$panel), function(panel_label) {
+    yr <- if (grepl("2023", panel_label)) "2023" else "2024"
+    res <- res_list[[yr]][[met]]
+    if (is.null(res) || is.null(res$model)) return(NULL)
+    
+    grid <- res$data %>%
+      filter(condition %in% unique(dat$condition[dat$panel == panel_label])) %>%
+      group_by(condition) %>%
+      reframe(met_use = seq(min(met_use, na.rm = TRUE),
+                            max(met_use, na.rm = TRUE),
+                            length.out = 50),
+              .groups = "drop") %>%
+      mutate(
+        treatmentpond = ifelse(grepl("^Control", condition), "control", "herbivory"),
+        panel = panel_label
+      )
+    
+    pr <- predict(res$model, newdata = grid, se.fit = TRUE, re.form = NA)
+    mutate(grid,
+           fit  = pr$fit,
+           lwr  = fit - 1.96 * pr$se.fit,
+           upr  = fit + 1.96 * pr$se.fit)
+  })
+  
+  anno_df_slopes <- purrr::map_dfr(unique(dat$panel), function(panel_label) {
+    yr <- if (grepl("2023", panel_label)) "2023" else "2024"
+    res <- res_list[[yr]][[met]]
+    if (is.null(res) || is.null(res$slopes)) return(NULL)
+    
+    slopes_summary <- summary(res$slopes, infer = TRUE)
+    slopes <- as.data.frame(slopes_summary) %>%
+      filter(condition %in% unique(dat$condition[dat$panel == panel_label])) %>%
+      mutate(
+        treatmentpond = ifelse(grepl("^Control", condition), "control", "herbivory"),
+        abbrev = ifelse(treatmentpond == "control", "C", "H"),
+        signif_stars = case_when(
+          p.value < 0.01 ~ "**",
+          p.value < 0.05 ~ "*",
+          TRUE ~ ""
+        ),
+        lbl = sprintf("%s: %.3f ± %.3f %s", abbrev, met_use.trend, SE, signif_stars),
+        panel = panel_label
+      )
+  })
+  
+  anno_df_effect <- purrr::map_dfr(unique(dat$panel), function(panel_label) {
+    yr <- if (grepl("2023", panel_label)) "2023" else "2024"
+    effect_type <- if (grepl("Indirect", panel_label)) "Indirect_Effect" else "Combined_Effect"
+    effect_row <- summary_all %>% filter(Metabolite == met)
+    est <- effect_row[[paste0("estimate_", effect_type, "_", yr)]]
+    se  <- effect_row[[paste0("std.error_", effect_type, "_", yr)]]
+    p   <- effect_row[[paste0("p.value_", effect_type, "_", yr)]]
+    if (is.na(est)) return(NULL)
+    tibble(
+      panel = panel_label,
+      lbl = sprintf("%s: %.3f ± %.3f %s",
+                    gsub("_", " ", effect_type), est, se,
+                    ifelse(p < 0.01, "**", ifelse(p < 0.05, "*", "")))
+    )
+  })
+  
+  y_padding <- 0.05
+  anno_df_effect <- anno_df_effect %>%
+    left_join(dat %>% group_by(panel) %>% summarise(ymin = min(fitness, na.rm = TRUE)), by = "panel") %>%
+    mutate(y = ymin - y_padding)
+  
+  anno_df_slopes <- anno_df_slopes %>%
+    left_join(dat %>% group_by(panel) %>% summarise(ymax = max(fitness, na.rm = TRUE)), by = "panel") %>%
+    group_by(panel) %>%
+    mutate(y = ymax + 0.04 - 0.08 * (row_number() - 1))
+  
+  ggplot(dat, aes(met_use, fitness, colour = treatmentpond)) +
+    geom_point(alpha = 0.5, size = 0.8) +
+    geom_ribbon(data = pred_rib, aes(x = met_use, ymin = lwr, ymax = upr, fill = treatmentpond),
+                alpha = 0.2, colour = NA, inherit.aes = FALSE) +
+    geom_line(data = pred_rib, aes(y = fit), linewidth = 1.2, inherit.aes = TRUE) +
+    geom_text(data = anno_df_effect, aes(x = -Inf, y = y, label = lbl),
+              hjust = -0.1, vjust = 0, inherit.aes = FALSE, size = 3, color = "black") +
+    geom_text(data = anno_df_slopes, aes(x = Inf, y = y, label = lbl, colour = treatmentpond),
+              hjust = 1.1, inherit.aes = FALSE, size = 3) +
+    facet_wrap(~factor(panel, levels = c("Indirect 2023", "Indirect 2024", "Combined 2023", "Combined 2024")),
+               ncol = 4, scales = "free_x") +
+    coord_cartesian(ylim = c(-0.22, 0.22)) +
+    scale_colour_manual(values = c(control = "#0072B2", herbivory = "#D55E00")) +
+    scale_fill_manual(values = c(control = "#0072B2", herbivory = "#D55E00")) +
+    geom_hline(yintercept = 0, linetype = "dotted", color = "gray40") +
+    theme_bw() +
+    theme(
+      strip.text = element_text(face = "bold"),
+      panel.grid = element_blank(),
+      legend.position = "none"
+    ) +
+    labs(title = paste0(met, " (2023 & 2024)"), x = NULL, y = "Fitness")
+}
+
+# Generate plots and save
+plots <- lapply(signif_mets, function(met) {
+  dat_met <- purrr::map_dfr(c("2023", "2024"), function(yr) {
+    res <- all_res[[yr]][[met]]
+    if (is.null(res)) return(NULL)
+    mutate(res$data, year = yr, Metabolite = met)
+  })
+  if (nrow(dat_met) == 0) return(NULL)
+  create_scatter(dat_met, all_res, met)
+})
+
+# Save in pages with 2 metabolites per page
+plots <- Filter(Negate(is.null), plots)
+metabolite_groups <- split(plots, ceiling(seq_along(plots) / 2))
+grDevices::cairo_pdf("supplementary_metabolites_full_no_filter.pdf",
+                     width = 17.8 / 2.54, height = 18 / 2.54)  # convert cm to inches
+for (group in metabolite_groups) {
+  print(wrap_plots(group, ncol = 1))
+}
+dev.off()
+```
+
+## Figure S7: Bar plots
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+bar_data_all <- summary_all %>%
+  select(Metabolite,
+         starts_with("estimate"),
+         starts_with("std.error"),
+         starts_with("p.value")) %>%
+  pivot_longer(
+    -Metabolite,
+    names_to = c(".value", "Effect", "Year"),
+    names_pattern = "(estimate|std\\.error|p\\.value)_(Direct_Effect|Indirect_Effect|Combined_Effect)_(\\d{4})"
+  ) %>%
+  mutate(
+    signif = ifelse(p.value < 0.05, "*", ""),
+    Effect = gsub("_Effect", "", Effect)
+  )
+
+# Fix: Add label_y for significance stars
+bar_data_all <- bar_data_all %>%
+  group_by(Metabolite) %>%
+  mutate(
+    max_val = max(estimate + std.error, na.rm = TRUE),
+    min_val = min(estimate - std.error, na.rm = TRUE),
+    buffer  = 0.3 * (max_val - min_val),
+    label_y = estimate + sign(estimate) * (std.error + buffer * 0.5)
+  ) %>%
+  ungroup()
+
+# Final PNAS-style plot
+p_bar_all <- ggplot(bar_data_all, aes(Effect, estimate, fill = Year)) +
+  geom_col(position = position_dodge(0.9), width = 0.75) +
+  geom_errorbar(aes(ymin = estimate - std.error,
+                    ymax = estimate + std.error),
+                width = 0.2, position = position_dodge(0.9), linewidth = 0.4) +
+  geom_text(aes(y = label_y, label = signif),
+            position = position_dodge(0.9), size = 2.8, vjust = -0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.3, color = "grey50") +
+  facet_wrap(~Metabolite, scales = "free_y", ncol = 4) +
+  scale_fill_manual(values = c("2023" = "#8CBA5E", "2024" = "#A87C7C")) +
+  scale_x_discrete(labels = function(x) gsub("_Effect", "", x)) +
+  labs(x = NULL, y = "Estimate ± SE") +
+  theme_bw(base_size = 14) +
+  theme(
+    axis.text.x      = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y      = element_text(size = 12),
+    axis.title.y     = element_text(size = 12),
+    strip.text       = element_text(size = 12, face = "bold"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position  = "top",
+    legend.title     = element_text(size = 9),
+    legend.text      = element_text(size = 8),
+    plot.title       = element_blank()
+  )
+
+ggsave("all_metabolite_selection_barplots.pdf", p_bar_all, width = 15, height = 10)
+print(p_bar_all)
+```
+
+## Figure 4: Temporal dynamics
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+# Create a lookup vector for renaming
+metabolite_names <- c(
+  "Chlorogenic.acid"   = "Chlorogenic acid",
+  "Cyanidine.3.Glc"    = "Cyanidin 3-O-glucoside",
+  "Cyanidin.Mal.Glc"   = "Cyanidin 3-O-malonylglucoside",
+  "Luteoline.8.C.Glc"  = "Luteolin 8-C-glucoside",
+  "Luteoline.7.O.Glc"  = "Luteolin 7-O-glucoside",
+  "Apigenine.8.C.Glc"  = "Apigenin 8-C-glucoside",
+  "Apigenine.7.O.Glc"  = "Apigenin 7-O-glucoside",
+  "Tryptamine"         = "Tryptamine",
+  "Shikimic.acid"      = "Shikimic acid")
+
+dyn_dat <- summary_all %>%
+  pivot_longer(
+    cols = matches("^(estimate|std\\.error)_(Direct|Indirect)_Effect_\\d{4}$"),
+    names_to = c(".value", "Effect", "Year"),
+    names_pattern = "^(estimate|std\\.error)_(Direct_Effect|Indirect_Effect)_(\\d{4})$"
+  ) %>%
+  filter(!is.na(estimate)) %>%
+  filter(Metabolite != "Luteoline")   # careful: spelling must match exactly!
+
+if (nrow(dyn_dat) > 0) {
+  p_dyn <- ggplot(dyn_dat, aes(
+    x = Year,
+    y = estimate,
+    colour = Effect,
+    linetype = Effect,
+    shape = Effect,
+    group = Effect
+  )) +
+    geom_hline(yintercept = 0, colour = "grey50", linetype = "dashed", linewidth = 0.5) +
+    geom_line(linewidth = 0.5) +
+    geom_point(size = 2.5) +
+    geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error),
+                  width = 0.15, linewidth = 0.4) +
+    facet_wrap(~Metabolite, scales = "free_y", ncol = 3,
+               labeller = labeller(Metabolite = metabolite_names)) +
+    scale_colour_manual(values = sel_cols) +
+    scale_linetype_manual(values = c(Direct_Effect = "solid",
+                                     Indirect_Effect = "dashed")) +
+    scale_shape_manual(values = c(Direct_Effect = 16,
+                                  Indirect_Effect = 17)) +
+    labs(
+      x = "Year",
+      y = "Selection estimate"
+    ) +
+    theme_bw(base_size = 12) +
+    theme(
+      panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.3),
+      panel.spacing = unit(0.5, "lines"),
+      panel.grid = element_blank(),
+      axis.text.x = element_text(size = 10),
+      axis.text.y = element_text(size = 8),
+      axis.title.y = element_text(size = 12),
+      strip.text = element_text(size = 7.5, face = "bold", margin = margin(2, 2, 2, 2)),
+      legend.position = "none"
+    )
+  
+  print(p_dyn)
+}
+
+ggsave("Metabolites_PNAS.pdf", p_dyn,
+       device = cairo_pdf, width = 17.8, height = 12, units = "cm")
+
+
+   
+```
+
