@@ -5,7 +5,7 @@ output: html_document
 ---
 ## Introduction
 
-This R Markdown document analyzes the evolutionary and ecological responses of *Spirodela polyrhiza* to experimental snail herbivory, based on transplant experiments conducted in 2023 and 2024. It focuses on the relative growth rate of populations from different evolutionary backgrounds (control vs. herbivory ) when exposed to control or herbivory environments. The analyses support the generation of **Figure 3C** (main text) and **Figure S6** (supplementary material) in the manuscript.
+This R Markdown document analyzes the evolutionary and ecological responses of *Spirodela polyrhiza* to experimental snail herbivory, based on transplant experiments conducted in 2023 and 2024. It focuses on the relative growth rate of populations from different evolutionary backgrounds (control vs. herbivory ) when exposed to control or herbivory environments. The analyses support the generation of **Figure 4C** (main text) and **Figure S5** (supplementary material).
 
 ## Load required libraries
 
@@ -18,7 +18,7 @@ library(car)
 library(plotrix)
 ```
 
-## Figure 3C: data preparation and relative growth rate (2023)
+## Figure 4C: data preparation and relative growth rate (2023)
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -42,11 +42,11 @@ mdata.plot <- df_filtered  %>%
   )
 ```
 
-## Figure 3C: plot 2023
+## Figure 4C: plot 2023
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 color_palette <- c("Control" = "#0072B2", "Herbivory" = "#D55E00")
-px3C2023 <- ggplot(mdata.plot, aes(x = host_environment, y = fitness_av,
+px4C2023 <- ggplot(mdata.plot, aes(x = host_environment, y = fitness_av,
                                     color = origin_population,
                                     shape = population)) +
   
@@ -78,10 +78,10 @@ px3C2023 <- ggplot(mdata.plot, aes(x = host_environment, y = fitness_av,
     panel.spacing = unit(1, "lines"),
     plot.margin = margin(10, 5, 10, 10)
   )
-px3C2023
+px4C2023
 ```
 
-## Statistical analysis for figure 1C (2023)
+## Statistical analysis for figure 4C (2023)
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 model <- lmer(rel.count ~ origin_population + host_environment + population +
@@ -90,7 +90,7 @@ model <- lmer(rel.count ~ origin_population + host_environment + population +
 Anova(model, test ="F")
 ```
 
-## Figure 3C: data preparation and relative growth rate (2024)
+## Figure 4C: data preparation and relative growth rate (2024)
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 df_filtered1 <- df %>% filter(year == 2024)
@@ -104,10 +104,10 @@ mdata.plot1 <- df_filtered1 %>%
   )
 ```
 
-## Figure 3C: plot 2024
+## Figure 4C: plot 2024
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
-px3C2024 <- ggplot(mdata.plot1, aes(x = host_environment, y = fitness_av,
+px4C2024 <- ggplot(mdata.plot1, aes(x = host_environment, y = fitness_av,
                               color = origin_population)) +
   geom_pointrange(aes(ymin = fitness_av - fitness_se, ymax = fitness_av + fitness_se),
                   position = position_dodge(0.3), size = 1) +
@@ -129,10 +129,10 @@ px3C2024 <- ggplot(mdata.plot1, aes(x = host_environment, y = fitness_av,
     y = "Relative Growth Rate"
   )
 
-px3C2024
+px4C2024
 ```
 
-## Statistical analysis for figure 1C (2024)
+## Statistical analysis for figure 4C (2024)
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 model1 <- lmer(rel.count ~ origin_population + host_environment +
@@ -141,7 +141,7 @@ model1 <- lmer(rel.count ~ origin_population + host_environment +
 Anova(model1, test ="F")
 ```
 
-## Figure S6: data preparation for initial population 2023
+## Figure S5: data preparation for initial population 2023
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -156,10 +156,10 @@ mdata.plot2 <- df_filtered2 %>%
   )
 ```
 
-## Figure S6: plot initial population 2023
+## Figure S5: plot initial population 2023
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
-pxS6 <- ggplot(mdata.plot2, aes(x = host_environment, y = fitness_av, 
+pxS5 <- ggplot(mdata.plot2, aes(x = host_environment, y = fitness_av, 
                                color = origin_population)) +  
   geom_pointrange(
     aes(ymin = fitness_av - fitness_se, ymax = fitness_av + fitness_se),
@@ -194,10 +194,10 @@ pxS6 <- ggplot(mdata.plot2, aes(x = host_environment, y = fitness_av,
     legend.text = element_text(size = 12)
   )
 
-pxS6
+pxS5
 ```
 
-## Statistical analysis for figure S6 (2023)
+## Statistical analysis for figure S5 (2023)
 
 ```{r,echo=FALSE, message=FALSE, warning=FALSE}
 model2 <- lmer(rel.count ~ origin_population + host_environment +
@@ -205,3 +205,4 @@ model2 <- lmer(rel.count ~ origin_population + host_environment +
                data = df_filtered2)
 Anova(model2, test ="F")
 ```
+
