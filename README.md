@@ -1,4 +1,4 @@
-# Real-time plant evolution reveals dynamic and contrasting roles of direct and indirect effects of herbivory on plant evolution
+# Contrastng and fluctuating selection from direct and indirect herbivory drives transient plant evolution
 
 **Authors:** Sara Nouere, Martin Schäfer, Antonino Malacrinò, Martin Lohr, Christoph Vorburger, and Shuqing Xu
 
