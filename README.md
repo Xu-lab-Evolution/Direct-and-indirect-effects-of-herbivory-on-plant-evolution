@@ -1,4 +1,4 @@
-# Contrastng and fluctuating selection from direct and indirect herbivory drives transient plant evolution
+# Contrasting and fluctuating selection from direct and indirect herbivory drives transient plant evolution
 
 **Authors:** Sara Nouere, Martin Schäfer, Antonino Malacrinò, Martin Lohr, Christoph Vorburger, and Shuqing Xu
 
