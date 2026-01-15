@@ -46,11 +46,11 @@ Raw data is available at NCBI SRA under the BioProject numbers:
    Data and code for reproducing Fig. 2D, Fig. S4, Table S6
 
 7. **Metabolites-fitness associations**  
-   Data and code for reproducing Fig. 5, Fig S6-11, and Table S11, table S12   
+   Data and code for reproducing Fig. 5, Fig S6-11, and Table S11, Table S12   
 
 6. **Pool-seq**  
    Data and code for reproducing:
-   -Fig. 3A-F snd Figure S3: Circular and time-series plots of genotype dynamics
+   -Fig. 3A-F and Figure S3: Circular and time-series plots of genotype dynamics
    -Tables S7-S8: genotype frequency model (mixed effects)
    -Table S9: PERMANOVA on microbial and algal community structure
    -Table S10: Shannon diversity (mixed model) 
