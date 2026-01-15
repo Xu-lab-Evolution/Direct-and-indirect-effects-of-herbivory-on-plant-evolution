@@ -28,13 +28,13 @@ Raw data is available at NCBI SRA under the BioProject numbers:
 
 ## Code Organization
 1. **Duckweed coverage**  
-   Data and code for reproducing Fig. 2A   
+   Data and code for reproducing Fig. 2A, Table S2   
 
 2. **Growth/Susceptibility assays**  
-   Data and code for reproducing Fig. 2C, Fig. S1C
+   Data and code for reproducing Fig. 2C, Fig. S1C, Table S3
 
 3. **Macroalgaea and Chlorophyll-a**  
-   Data and code for reproducing Fig. 2D, Fig. S1D
+   Data and code for reproducing Fig. 2B, Fig. S1D, Table S4, Table S5
 
 4. **Metabolites mixpopulation**  
    Data and code for reproducing Fig. S2A, Fig. S2B
@@ -45,15 +45,15 @@ Raw data is available at NCBI SRA under the BioProject numbers:
 6. **Nutrients and physichemical parameters**  
    Data and code for reproducing Fig. 2D, Fig. S4, Table S6
 
-7. **Phenotypic selection**  
-   Data and code for reproducing Fig. 5, Fig S6-11, and Table S7, table S8   
+7. **Metabolites-fitness associations**  
+   Data and code for reproducing Fig. 5, Fig S6-11, and Table S11, table S12   
 
 6. **Pool-seq**  
    Data and code for reproducing:
    -Fig. 3A-F snd Figure S3: Circular and time-series plots of genotype dynamics
-   -Table S3: : genotype frequency model (mixed effects)
-   -Table S4: PERMANOVA on microbial and algal community structure
-   -Table S5: Shannon diversity (mixed model) 
+   -Tables S7-S8: : genotype frequency model (mixed effects)
+   -Table S9: PERMANOVA on microbial and algal community structure
+   -Table S10: Shannon diversity (mixed model) 
 
 7. **Transplant experiment**  
    Data and code for reproducing Fig. 4C, Fig S5   
