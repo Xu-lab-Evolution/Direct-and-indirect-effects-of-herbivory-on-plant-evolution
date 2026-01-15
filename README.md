@@ -51,7 +51,7 @@ Raw data is available at NCBI SRA under the BioProject numbers:
 6. **Pool-seq**  
    Data and code for reproducing:
    -Fig. 3A-F snd Figure S3: Circular and time-series plots of genotype dynamics
-   -Tables S7-S8: : genotype frequency model (mixed effects)
+   -Tables S7-S8: genotype frequency model (mixed effects)
    -Table S9: PERMANOVA on microbial and algal community structure
    -Table S10: Shannon diversity (mixed model) 
 
